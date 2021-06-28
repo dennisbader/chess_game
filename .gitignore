@@ -1,0 +1,5 @@
+# general
+.DS_Store
+
+# chess game pickle save file
+saved_state.pkl
