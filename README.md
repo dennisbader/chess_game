@@ -23,6 +23,6 @@ For an easy conda environment installation you can find a .yml file at ./env_bui
 > python your_path_to_chess_game/chess_game.py
 
 * To move a piece: first click on the piece, then click on the field you want to move to.
-* Undo/redo move: you can always go back and forth between the move history by clicking the UNDO/REDO buttons
-* The game should only allow valid moves. In case your move is invalid, the command-line interface interface will tell why it is invalid.
+* Undo/redo move: you can always go back and forth between alreayed played moves by clicking the UNDO/REDO buttons
+* The game should only allow valid moves. In case your move is invalid, the command-line interface will tell why it is invalid.
 * Have fun playing!
