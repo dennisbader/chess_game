@@ -1,0 +1,9 @@
+name: chess_gui_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.7
+  - numpy=1.17.2
+  - matplotlib=3.1.1
+  - tk=8.6.8
