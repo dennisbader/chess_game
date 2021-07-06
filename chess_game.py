@@ -28,12 +28,9 @@ class GameBoard(tk.Frame):
         self.kill = False
         self.field_names = np.array([['{}{}'.format(i, j) for i in self.column_chars] for j in range(1, 8 + 1)])
 
-        self.label_w = self.field_w / 2
-        self.board_w = n_cols * self.field_w
-        self.board_h = n_rows * self.field_w
-        self.board_ext_w = self.board_w + 2 * self.label_w
-        self.board_ext_h = self.board_h + self.label_w
-        self.panel_w = self.board_w / 2
+        # get board game dimensions
+        self.board_w, self.board_h, self.label_w, self.board_ext_w, self.board_ext_h, self.panel_w \
+            = self.get_gui_dimensions(field_w=field_w, n_rows=n_rows, n_cols=n_cols)
 
         parent.resizable(False, False)
         tk.Frame.__init__(self, parent)
@@ -61,7 +58,29 @@ class GameBoard(tk.Frame):
         # changes the window size
         self.canvas.bind('<Configure>', self.refresh)
         return
-    
+
+    @staticmethod
+    def get_gui_dimensions(field_w, n_rows, n_cols):
+        """creates the dimensions for a GUI board game including field labels and a user interface panel:
+        Arguments:
+            field_w: the width of the square chess fields
+            n_rows: the number of field rows (for chess: n_rows=8)
+            n_cols: the number of field columns (for chess: n_cols=8)
+        Returns:
+            board_(w/h): the (width/height) of the board including only playable fields
+            label_w: the column/row label width
+            board_ext_(w/h): the (width/height) of the board including playable fields and labels
+            panel_w: the width of the panel user interface (for additional features to the game)
+        """
+
+        board_w = n_cols * field_w
+        board_h = n_rows * field_w
+        label_w = field_w / 2
+        board_ext_w = board_w + 2 * label_w
+        board_ext_h = board_h + label_w
+        panel_w = board_w / 2
+        return board_w, board_h, label_w, board_ext_w, board_ext_h, panel_w
+
     @staticmethod
     def make_button(button_name, button_method, canvas, x, y):
         """creates a button with a name and method"""
