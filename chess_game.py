@@ -1,6 +1,5 @@
 import os
 import numpy as np
-from matplotlib import pyplot as plt
 
 import tkinter as tk
 import _pickle as pickle
@@ -99,7 +98,6 @@ class GameBoard(tk.Frame):
         return field_idx
 
     def callback(self, event):
-        # print(board[self.coord2field(event)])
         if Piece.is_checkmate:
             return
         field_idx = self.coord2field(event)
@@ -107,7 +105,6 @@ class GameBoard(tk.Frame):
             piece = board[field_idx]
             field_name = self.field_names[field_idx]
             if self.click_idx > 0:
-                # print('move to ', self.coord2field(event))
                 self.piece.move(field_name)
                 if self.valid_move:
                     if self.kill:
@@ -124,7 +121,6 @@ class GameBoard(tk.Frame):
                     self.final_move = Piece.move_count - 1
                     self.redo_move = self.final_move
                     Piece.save_state()
-                    #Piece.load_state(Piece.move_count)
                 self.click_idx = 0
                 self.canvas.delete(self.highlighter)
             else:
@@ -139,19 +135,14 @@ class GameBoard(tk.Frame):
         return
 
     def rectangle_coords(self, event, field_idx):
-        #print(event.x)
         x_0 = int((event.x - self.label_w) / self.field_w) * self.field_w + self.label_w
         y_0 = int(event.y / self.field_w + 1) * self.field_w
         x_1 = x_0 + self.field_w
         y_1 = y_0 - self.field_w
-        #print(event.x, event.y)
-        #print(x_0,y_0,x_1,y_1)
         return x_0, y_0, x_1, y_1
 
     def addpiece(self, name, image, field_idx):
         """Add a piece to the playing board"""
-        # row = abs(field_idx[0][0] - 7)
-        # column = field_idx[1][0]
         self.canvas.create_image(0,0, image=image, tags=(name, 'piece'), anchor='c')
         self.placepiece(name, (field_idx[0][0], field_idx[1][0]))
 
@@ -188,13 +179,11 @@ class GameBoard(tk.Frame):
             for j in range(len(board[i])):
                 board[i][j] = None
                 board[i][j] = state['board'][i][j]
-        #board = state['board'].copy()
         self.canvas.delete('piece')
         for p in Piece:
             _images[p.short_name] = tk.PhotoImage(file=p.img_file)
             self.addpiece(p.short_name, _images[p.short_name], p.field_idx)
         return
-
 
     def clickUndo(self, event):
         state_count = self.redo_move - 1
@@ -237,32 +226,15 @@ class GameBoard(tk.Frame):
             self.placepiece(name, (abs(self.pieces[name][0]-7), self.pieces[name][1]))
         self.canvas.tag_raise('piece')
         self.canvas.tag_lower('square')
-
-class Board:
-    #@staticmethod
-    def start_game():
-        binary_board = np.zeros((8, 8))
-        for i in range(len(board)):
-            for j in range(len(board[i])):
-                element = board[i][j]
-                if not element:
-                    binary_board[i][j] = 1
-                elif element.color == 1:
-                    binary_board[i][j] = 2
-                else:
-                    binary_board[i][j] = 0
-        # plt.ion()
-        # plt.pcolormesh(binary_board, cmap='gray', edgecolors='darkgrey')
-        # plt.plot()
-        # plt.show(block=False)
         return
+
 
 class IterRegistry(type):
     def __iter__(cls):
         return iter(cls._registry)
 
 
-class Piece(metaclass = IterRegistry):
+class Piece(metaclass=IterRegistry):
     _registry = []
     column_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
     move_count = 0
@@ -274,6 +246,7 @@ class Piece(metaclass = IterRegistry):
     rochade_field_idx = None
     queen_counter = 0
     is_checkmate = False
+
     def __init__(self, name, short_name, color, current_field, img_file):
         """Init Description
 
@@ -294,7 +267,6 @@ class Piece(metaclass = IterRegistry):
         self.possible_moves = []
         self.checks = False
         self.img_file = img_file
-        #self.img_file = tk.PhotoImage(file=img_file)
         self.transform = False
 
     @classmethod
@@ -336,14 +308,14 @@ class Piece(metaclass = IterRegistry):
             _saved_state = pickle.load(fin)
         return _saved_state
 
-    def move_counter(self):
+    @staticmethod
+    def move_counter():
         Piece.move_count += 1
 
     def get_field_name(self, field_idx):
         return self.field_names[field_idx[0],field_idx[1]]
 
     def description(self):
-
         print('{}, {}'.format(self.name, 'white' if self.color == 1 else 'black'))
         print('Current field: {}'.format(self.current_field))
         return
@@ -353,7 +325,6 @@ class Piece(metaclass = IterRegistry):
 
     def valid_field(self, field_to_check, piece_color, board, request_text=True):
         """
-
         :return: is_valid: 0 if not valid or field occupied by same color,
         1 if empty field,
         2 if field occupied by opposite color
@@ -367,16 +338,13 @@ class Piece(metaclass = IterRegistry):
                     print('MoveError: {} contains piece of same color'.format(field_to_check))
                 pass
             else:
-                # print('field {} contains piece of opposite color'.format(field_to_check))
                 field_isvalid = 2
         else:
-            # print('field {} is empty'.format(field_to_check))
             field_isvalid = 1
         return field_isvalid
 
     def get_move_step(self, move_to):
         """returns a tuple of the move vector"""
-        # print(tuple([self.get_field_idx(move_to)[i] - self.field_idx[i] for i in range(2)]))
         return tuple([self.get_field_idx(move_to)[i] - self.field_idx[i] for i in range(2)])
 
     def get_intermediate_steps(self, step, move_to):
@@ -388,35 +356,29 @@ class Piece(metaclass = IterRegistry):
             for s in range(steps_number):
                 field = [int(field[i] + step[i]/steps_number) for i in range(2)]
                 intermediate_steps.append(self.field_names[field[0]][field[1]])
-                # print(intermediate_steps)
         else:
             intermediate_steps.append(move_to)
         if 'Knight' in self.name:
             intermediate_steps = [intermediate_steps[-1]]
         return intermediate_steps
 
-    def move_validity(self, intermediate_steps, color, request_text=True, is_rochade=False):
+    def move_validity(self, intermediate_steps, color, request_text=True):
         valid_text = ''
         for intermediate_step in intermediate_steps[:-1]:
-            # if is_rochade:
-            #
             if not self.valid_field(intermediate_step, color, board, request_text) == 1:
                 valid_text = 'Intermediate step to {} is invalid'.format(intermediate_step)
-                # print('Intermediate step to {} is invalid'.format(intermediate_step))
                 return 0, valid_text
         final_step_isvalid = self.valid_field(intermediate_steps[-1], color, board, request_text)
         if not final_step_isvalid:
             return 0, valid_text
         elif final_step_isvalid == 1:
             valid_text = '{} moves to {}'.format(self.name, intermediate_steps[-1])
-            # print('{} moves to {}'.format(self.name, intermediate_steps[-1]))
             gameboard.valid_move = True
             return 1, valid_text
         else:
 
             enemy_name = board[self.get_field_idx(intermediate_steps[-1])][0].name
             valid_text = '{} kills {} on {}'.format(self.name, enemy_name ,intermediate_steps[-1])
-            # print('{} kills {} on {}'.format(self.name, enemy_name ,intermediate_steps[-1]))
             if 'Pawn' in self.name and len(intermediate_steps) > 1:
                 if request_text:
                     print('MoveError: {} cannot move to {}'.format(self.name, intermediate_steps[-1]))
@@ -426,7 +388,7 @@ class Piece(metaclass = IterRegistry):
                 gameboard.kill = board[self.get_field_idx(intermediate_steps[-1])][0]
             return 2, valid_text
 
-    def resurrect_piece(self,enemy):
+    def resurrect_piece(self, enemy):
         enemy.is_alive = 1
         enemy.current_field = self.current_field
         enemy.field_idx = self.field_idx
@@ -447,7 +409,6 @@ class Piece(metaclass = IterRegistry):
             if piece.color != color and piece.is_alive:
                 step = [s[0] for s in piece.get_move_step(move_to)]
                 piece.piece_move_types(move_to)
-                # print(piece.name, step, piece.possible_moves)
                 if step in piece.possible_moves:
                     intermediate_steps = piece.get_intermediate_steps(step, move_to)
                     move_isvalid, valid_text = piece.move_validity(intermediate_steps, piece.color, request_text)
@@ -457,7 +418,6 @@ class Piece(metaclass = IterRegistry):
         return check
 
     def move_piece(self, move_to, move_isvalid, in_rochade=False):
-
         # empty the current field
         if not in_rochade:
             mate_board = board.copy()
@@ -476,7 +436,8 @@ class Piece(metaclass = IterRegistry):
         else:
             return
 
-    def kill_piece(self, enemy):
+    @staticmethod
+    def kill_piece(enemy):
         enemy.is_alive = 0
         enemy.current_field = 'Out of field'
         enemy.field_idx = None
@@ -515,7 +476,6 @@ class Piece(metaclass = IterRegistry):
         short_name = 'Q_' + str(Piece.queen_counter) + color_text[0]
         p = Queen('Queen ' + color_text, short_name, self.color, self.current_field,
                   queenw_im if self.color == 1 else queenb_im)
-        # board[self.field_idx][0] = None
         board[self.field_idx] = p
         self.kill_piece(self)
         _images[self.short_name] = ''
@@ -531,7 +491,6 @@ class Piece(metaclass = IterRegistry):
         info_text = ''
         request_text = False if not mate_checker else True
         if step in possible_moves:
-            # print('Valid Field move of {} to field {}'.format(self.name, move_to))
             intermediate_steps = self.get_intermediate_steps(step, move_to)
             move_isvalid, valid_text = self.move_validity(intermediate_steps, self.color, request_text)
             if move_isvalid:
@@ -557,7 +516,6 @@ class Piece(metaclass = IterRegistry):
                         self.move_counter()
                         if Piece.is_rochade:
                             Piece.rochade_rook.move_idx += 1
-                        # Piece.is_rochade = False
                         if self.check_pawn2queen():
                             self.pawn2queen()
                         opp_color = 2 if self.color == 1 else 1
@@ -575,27 +533,9 @@ class Piece(metaclass = IterRegistry):
         if mate_checker:
             if info_text:
                 print(info_text)
-            # self.plot_grip()
             return
         else:
             return checkmate
-
-    def plot_grip(self):
-        binary_board = np.zeros((8, 8))
-        for i in range(len(board)):
-            for j in range(len(board[i])):
-                element = board[i][j]
-                if not element:
-                    binary_board[i][j] = 1
-                elif element.color == 1:
-                    binary_board[i][j] = 2
-                else:
-                    binary_board[i][j] = 0
-        plt.ion()
-        plt.pcolormesh(binary_board, cmap='gray', edgecolors='darkgrey')
-        plt.plot()
-        plt.show(block=False)
-        return
 
     def move(self, move_to):
         print('Move {}:'.format(self.move_count))
@@ -609,10 +549,8 @@ class Piece(metaclass = IterRegistry):
         if not np.array(np.where(self.field_names == move_to)).size:
             print('FieldError: The Field does not exist! Try another value')
             return
-        #self.save_state()
         self.move_types(move_to)
         self.execute_move(move_to, self.possible_moves)
-        #self.load_state(self.move_count-1)
         print('')
         return
 
@@ -730,6 +668,7 @@ class King(Piece):
     possible_moves = []
     normal_moves = [[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]]
     rochade = [[0,-2],[0,2]]
+
     def move(self, move_to):
         super().move(move_to)
 
@@ -740,12 +679,11 @@ class King(Piece):
         if self.move_idx == 0:
             self.possible_moves = self.normal_moves
             move_step = [i[0] for i in self.get_move_step(move_to)]
-            # print(move_step)
             if move_step in self.rochade and not Piece.was_checked[self.color -1] and mate_checker:
                 rooks = [p for p in Piece if 'Rook' in p.name and p.color == self.color]
                 for rook in rooks:
-                    if move_step[-1] > 0 and '2' in rook.name or \
-                        move_step[-1] < 0 and '1' in rook.name and rook.move_idx == 0:
+                    if move_step[-1] > 0 and '2' in rook.name \
+                            or move_step[-1] < 0 and '1' in rook.name and rook.move_idx == 0:
                         self.possible_moves = self.normal_moves + [move_step]
                         Piece.is_rochade = True
                         Piece.is_rochade_gui = True
@@ -757,18 +695,18 @@ class King(Piece):
             self.possible_moves = self.normal_moves
 
 
-def initialize_Board():
-    board = np.empty((8, 8), dtype=object)
+def initialize_board():
+    board_frame = np.empty((8, 8), dtype=object)
     column_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
     for row in range(8):
         for column, column_char in zip(range(8), column_chars):
             field_name = '{}{}'.format(column_char, row + 1)
             if list(filter(lambda p: p.current_field == field_name, Piece)):
                 p = list(filter(lambda p: p.current_field == field_name, Piece))[0]
-                board[row, column] = p
+                board_frame[row, column] = p
             else:
                 pass
-    return board
+    return board_frame
 
 
 root_dir = os.path.dirname(__file__)
@@ -835,7 +773,7 @@ Q_B = Queen('Queen Black', 'Q_B', 2, 'D8', queenb_im)
 
 save_file = os.path.join(root_dir, 'saved_state.pkl')
 
-board = initialize_Board()
+board = initialize_board()
 Piece.save_state(initializer=True)
 gameboard = GameBoard(root)
 gameboard.pack(side='top', fill='both', expand='False', padx=0, pady=0)
