@@ -1,16 +1,18 @@
-import os
 import numpy as np
-
 import tkinter as tk
-import _pickle as pickle
+
+from chess_core import GameOps
 
 
 class GameBoard(tk.Frame):
     column_chars, row_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], ['1', '2', '3', '4', '5', '6', '7', '8']
     label_column, label_row = [], []
+    piece_images = {}
+    piece_image_paths = {}
 
-    def __init__(self, parent, n_rows=8, n_cols=8, field_w=64, color1='#F0D9B5', color2='#B58863'):
+    def __init__(self, parent, board_state, n_rows=8, n_cols=8, field_w=64, color1='#F0D9B5', color2='#B58863'):
         """field_w is the width of a field, in pixels"""
+        self.board_state = board_state
         self._saved_states = 0
         self.final_move = 0
         self.redo_move = 0
@@ -56,6 +58,7 @@ class GameBoard(tk.Frame):
         # this binding will cause a refresh if the user interactively
         # changes the window size
         self.canvas.bind('<Configure>', self.refresh)
+        self.pack(side='top', fill='both', expand='False', padx=0, pady=0)
         return
 
     @staticmethod
@@ -98,29 +101,29 @@ class GameBoard(tk.Frame):
         return field_idx
 
     def callback(self, event):
-        if Piece.is_checkmate:
+        if GameOps.is_checkmate:
             return
         field_idx = self.coord2field(event)
         if field_idx:
-            piece = board[field_idx]
+            piece = self.board_state[field_idx]
             field_name = self.field_names[field_idx]
             if self.click_idx > 0:
                 self.piece.move(field_name)
                 if self.valid_move:
                     if self.kill:
-                        _images[self.kill.short_name] = ''
+                        self.piece_images[self.kill.short_name] = ''
                     self.placepiece(self.piece.short_name, field_idx)
-                    if Piece.is_rochade_gui:
-                        rochade_field_idx = Piece.rochade_rook.get_field_idx(Piece.rochade_move_to)
+                    if GameOps.is_rochade_gui:
+                        rochade_field_idx = GameOps.rochade_rook.get_field_idx(GameOps.rochade_move_to)
                         rochade_field_idx = (rochade_field_idx[0][0], rochade_field_idx[1][0])
-                        self.placepiece(Piece.rochade_rook.short_name, rochade_field_idx)
-                        Piece.is_rochade_gui = False
-                        Piece.is_rochade = False
+                        self.placepiece(GameOps.rochade_rook.short_name, rochade_field_idx)
+                        GameOps.is_rochade_gui = False
+                        GameOps.is_rochade = False
                     self.valid_move = False
                     self.kill = False
-                    self.final_move = Piece.move_count - 1
+                    self.final_move = GameOps.move_count - 1
                     self.redo_move = self.final_move
-                    Piece.save_state()
+                    GameOps.save_state()
                 self.click_idx = 0
                 self.canvas.delete(self.highlighter)
             else:
@@ -146,6 +149,12 @@ class GameBoard(tk.Frame):
         self.canvas.create_image(0,0, image=image, tags=(name, 'piece'), anchor='c')
         self.placepiece(name, (field_idx[0][0], field_idx[1][0]))
 
+    @classmethod
+    def addimages(cls, piece_images, piece_image_paths):
+        cls.piece_images = piece_images
+        cls.piece_image_paths = piece_image_paths
+        return
+
     def placepiece(self, name, field_idx):
         """Place a piece at the given row/column"""
         row = abs(field_idx[0] - 7)
@@ -161,28 +170,28 @@ class GameBoard(tk.Frame):
             return
         if self.redo_move == self.final_move:
             self.state_change = True
-            self._saved_states = Piece.load_state()
+            self._saved_states = GameOps.load_state()
         self.redo_move = state_count
         state = self._saved_states[self.redo_move].copy()
         print('Loaded Move {}'.format('Initial' if state_count == -1 else state_count))
-        Piece._registry = [p for p in state['pieces'] if p.is_alive]
-        Piece.move_count = state['globalVars']['move_count']
-        Piece.was_checked = state['globalVars']['was_checked']
-        Piece.is_rochade, Piece.is_rochade_gui = state['globalVars']['is_rochade'],\
+        GameOps.pieces = [p for p in state['pieces'] if p.is_alive]
+        GameOps.move_count = state['globalVars']['move_count']
+        GameOps.was_checked = state['globalVars']['was_checked']
+        GameOps.is_rochade, GameOps.is_rochade_gui = state['globalVars']['is_rochade'],\
                                                  state['globalVars']['is_rochade_gui']
-        Piece.rochade_rook = state['globalVars']['rochade_rook']
-        Piece.rochade_move_to = state['globalVars']['rochade_move_to']
-        Piece.rochade_field_idx = state['globalVars']['rochade_field_idx']
-        Piece.queen_counter = state['globalVars']['queen_counter']
-        Piece.is_checkmate = state['globalVars']['is_checkmate']
-        for i in range(len(board)):
-            for j in range(len(board[i])):
-                board[i][j] = None
-                board[i][j] = state['board'][i][j]
+        GameOps.rochade_rook = state['globalVars']['rochade_rook']
+        GameOps.rochade_move_to = state['globalVars']['rochade_move_to']
+        GameOps.rochade_field_idx = state['globalVars']['rochade_field_idx']
+        GameOps.queen_counter = state['globalVars']['queen_counter']
+        GameOps.is_checkmate = state['globalVars']['is_checkmate']
+        for i in range(len(self.board_state)):
+            for j in range(len(self.board_state[i])):
+                self.board_state[i][j] = None
+                self.board_state[i][j] = state['board'][i][j]
         self.canvas.delete('piece')
-        for p in Piece:
-            _images[p.short_name] = tk.PhotoImage(file=p.img_file)
-            self.addpiece(p.short_name, _images[p.short_name], p.field_idx)
+        for p in GameOps:
+            self.piece_images[p.short_name] = tk.PhotoImage(file=p.img_file)
+            self.addpiece(p.short_name, self.piece_images[p.short_name], p.field_idx)
         return
 
     def clickUndo(self, event):
@@ -209,10 +218,16 @@ class GameBoard(tk.Frame):
         for row in range(self.n_rows):
             self.label_column.append(tk.Label(self.canvas, text=self.column_chars[-1 - row], fg='black', bg='bisque'))
             self.label_row.append(tk.Label(self.canvas, text=self.row_chars[row], fg='black', bg='bisque'))
-            self.canvas.create_window(self.label_w / 2, self.label_w + self.field_w * row,
-                                      window=self.label_column[row])
-            self.canvas.create_window((self.field_w * row) + 2 * self.label_w, self.label_w / 2 + self.n_rows * self.field_w,
-                                      window=self.label_row[row])
+            self.canvas.create_window(
+                self.label_w / 2,
+                self.label_w + self.field_w * row,
+                window=self.label_column[row]
+            )
+            self.canvas.create_window(
+                (self.field_w * row) + 2 * self.label_w,
+                self.label_w / 2 + self.n_rows * self.field_w,
+                window=self.label_row[row]
+            )
             color = self.color1 if color == self.color2 else self.color2
             for col in range(self.n_cols):
                 x1 = (col * self.field_w + self.label_w)
