@@ -770,7 +770,9 @@ def initialize_Board():
                 pass
     return board
 
-im_path = os.path.join(os.getcwd(), 'images')
+
+root_dir = os.path.dirname(__file__)
+im_path = os.path.join(root_dir, 'images')
 rookb_im = os.path.join(im_path, 'bR.png')
 rookw_im = os.path.join(im_path, 'wR.png')
 pawnb_im = os.path.join(im_path, 'bP.png')
@@ -831,7 +833,7 @@ K_B = King('King Black', 'K_B', 2, 'E8', kingb_im)
 
 Q_B = Queen('Queen Black', 'Q_B', 2, 'D8', queenb_im)
 
-save_file = os.path.join(os.getcwd(), 'saved_state.pkl')
+save_file = os.path.join(root_dir, 'saved_state.pkl')
 
 board = initialize_Board()
 Piece.save_state(initializer=True)
