@@ -10,15 +10,15 @@ class GameBoard(tk.Frame):
     column_chars, row_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], ['1', '2', '3', '4', '5', '6', '7', '8']
     label_column, label_row = [], []
 
-    def __init__(self, parent, rows=8, columns=8, size=64, color1='#F0D9B5', color2='#B58863'):
-        """size is the size of a square, in pixels"""
+    def __init__(self, parent, n_rows=8, n_cols=8, field_w=64, color1='#F0D9B5', color2='#B58863'):
+        """field_w is the width of a field, in pixels"""
         self._saved_states = 0
         self.final_move = 0
         self.redo_move = 0
         self.state_change = False
-        self.rows = rows
-        self.columns = columns
-        self.size = size
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+        self.field_w = field_w
         self.color1 = color1
         self.color2 = color2
         self.pieces = {}
@@ -27,29 +27,30 @@ class GameBoard(tk.Frame):
         self.valid_move = False
         self.kill = False
         self.field_names = np.array([['{}{}'.format(i, j) for i in self.column_chars] for j in range(1, 8 + 1)])
-        self.label_space = self.size / 2
-        self.canvas_width = columns * self.size
-        self.canvas_height = rows * self.size
-        self.board_width = self.canvas_width + 2 * self.label_space
-        self.board_height = self.canvas_height + self.label_space
-        self.additional_width = self.canvas_width / 2
-        
+
+        self.label_w = self.field_w / 2
+        self.board_w = n_cols * self.field_w
+        self.board_h = n_rows * self.field_w
+        self.board_ext_w = self.board_w + 2 * self.label_w
+        self.board_ext_h = self.board_h + self.label_w
+        self.panel_w = self.board_w / 2
+
         parent.resizable(False, False)
         tk.Frame.__init__(self, parent)
         self.mainWindow = parent
         self.mainWindow.title('Chess')
         self.mainWindow.geometry('{}x{}'.format(
-            int(self.canvas_width + self.label_space + self.additional_width), self.canvas_height))
+            int(self.board_w + self.label_w + self.panel_w), self.board_h))
 
         self.canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0,
-                                width=self.canvas_width + self.label_space,
-                                height=self.canvas_height + self.label_space,
+                                width=self.board_w + self.label_w,
+                                height=self.board_h + self.label_w,
                                 background='bisque')
         self.canvas.bind('<Button-1>', self.callback)
         # undo/redo buttons
-        undo_x = self.canvas_width + self.label_space + 0.25 * self.additional_width
-        redo_x = undo_x + 0.5 * self.additional_width
-        buttons_y0 = self.size / 2
+        undo_x = self.board_w + self.label_w + 0.25 * self.panel_w
+        redo_x = undo_x + 0.5 * self.panel_w
+        buttons_y0 = self.field_w / 2
 
         self.make_button(button_name='UNDO', button_method=self.clickUndo, canvas=self.canvas, x=undo_x, y=buttons_y0)
         self.make_button(button_name='REDO', button_method=self.clickRedo, canvas=self.canvas, x=redo_x, y=buttons_y0)
@@ -60,7 +61,7 @@ class GameBoard(tk.Frame):
         # changes the window size
         self.canvas.bind('<Configure>', self.refresh)
         return
-
+    
     @staticmethod
     def make_button(button_name, button_method, canvas, x, y):
         """creates a button with a name and method"""
@@ -70,10 +71,10 @@ class GameBoard(tk.Frame):
         return button
 
     def coord2field(self, event):
-        if self.canvas_height + self.label_space > event.x > self.label_space and event.y <= self.canvas_height:
-            x = event.x - self.label_space
+        if self.board_h + self.label_w > event.x > self.label_w and event.y <= self.board_h:
+            x = event.x - self.label_w
             y = event.y
-            field_idx = (abs(int(y / self.size) -7), int(x / self.size))
+            field_idx = (abs(int(y / self.field_w) -7), int(x / self.field_w))
         else:
             field_idx = False
         return field_idx
@@ -120,10 +121,10 @@ class GameBoard(tk.Frame):
 
     def rectangle_coords(self, event, field_idx):
         #print(event.x)
-        x_0 = int((event.x - self.label_space) / self.size) * self.size + self.label_space
-        y_0 = int(event.y / self.size + 1) * self.size
-        x_1 = x_0 + self.size
-        y_1 = y_0 - self.size
+        x_0 = int((event.x - self.label_w) / self.field_w) * self.field_w + self.label_w
+        y_0 = int(event.y / self.field_w + 1) * self.field_w
+        x_1 = x_0 + self.field_w
+        y_1 = y_0 - self.field_w
         #print(event.x, event.y)
         #print(x_0,y_0,x_1,y_1)
         return x_0, y_0, x_1, y_1
@@ -140,8 +141,8 @@ class GameBoard(tk.Frame):
         row = abs(field_idx[0] - 7)
         column = field_idx[1]
         self.pieces[name] = (row, column)
-        x0 = (column * self.size) + int(self.size/2) + self.label_space
-        y0 = (row * self.size) + int(self.size/2)
+        x0 = (column * self.field_w) + int(self.field_w/2) + self.label_w
+        y0 = (row * self.field_w) + int(self.field_w/2)
         self.canvas.coords(name, x0, y0)
 
     def loadStates(self, state_count):
@@ -188,28 +189,28 @@ class GameBoard(tk.Frame):
 
     def refresh(self, event):
         """Redraw the board, possibly in response to window being resized"""
-        xsize = int((event.width - (self.label_space + 2)) / self.columns)
-        ysize = int((event.height - (self.label_space + 2)) / self.rows)
-        self.size = min(xsize, ysize)
-        self.label_space = self.size / 2
-        self.canvas_height = self.rows * self.size
-        self.canvas_width = self.columns * self.size
-        self.additional_width = self.canvas_width / 2
+        xsize = int((event.width - (self.label_w + 2)) / self.n_cols)
+        ysize = int((event.height - (self.label_w + 2)) / self.n_rows)
+        self.field_w = min(xsize, ysize)
+        self.label_w = self.field_w / 2
+        self.board_h = self.n_rows * self.field_w
+        self.board_w = self.n_cols * self.field_w
+        self.panel_w = self.board_w / 2
         self.canvas.delete('square')
         color = self.color2
-        for row in range(self.rows):
+        for row in range(self.n_rows):
             self.label_column.append(tk.Label(self.canvas, text=self.column_chars[-1 - row], fg='black', bg='bisque'))
             self.label_row.append(tk.Label(self.canvas, text=self.row_chars[row], fg='black', bg='bisque'))
-            self.canvas.create_window(self.label_space / 2, self.label_space + self.size * row,
+            self.canvas.create_window(self.label_w / 2, self.label_w + self.field_w * row,
                                       window=self.label_column[row])
-            self.canvas.create_window((self.size * row) + 2 * self.label_space, self.label_space / 2 + self.rows * self.size,
+            self.canvas.create_window((self.field_w * row) + 2 * self.label_w, self.label_w / 2 + self.n_rows * self.field_w,
                                       window=self.label_row[row])
             color = self.color1 if color == self.color2 else self.color2
-            for col in range(self.columns):
-                x1 = (col * self.size + self.label_space)
-                y1 = (row * self.size)
-                x2 = x1 + self.size
-                y2 = y1 + self.size
+            for col in range(self.n_cols):
+                x1 = (col * self.field_w + self.label_w)
+                y1 = (row * self.field_w)
+                x2 = x1 + self.field_w
+                y2 = y1 + self.field_w
                 self.canvas.create_rectangle(x1, y1, x2, y2, outline='black', fill=color, tags='square')
                 color = self.color1 if color == self.color2 else self.color2
         # placement of pieces
