@@ -295,7 +295,7 @@ class GameOps(metaclass=IterRegistry):
                     GameOps.is_rochade_gui, GameOps.is_rochade = False, False
                     if mate_checker:
                         self.board_gui.valid_move = False
-                        self.board_gui.kill = False
+                        self.board_gui.kill = None
                 else:
                     if mate_checker:
                         print(valid_text)

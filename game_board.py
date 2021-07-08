@@ -10,8 +10,7 @@ class GameBoard(tk.Frame):
     piece_images = {}
     piece_image_paths = {}
 
-    def __init__(self, parent, board_state, n_rows=8, n_cols=8, field_w=64, color1='#F0D9B5', color2='#B58863'):
-        """field_w is the width of a field, in pixels"""
+    def __init__(self, parent, board_state, n_rows=8, n_cols=8, color1='#F0D9B5', color2='#B58863'):
         parent.resizable(True, True)
         tk.Frame.__init__(self, parent)
         self.parent = parent
@@ -63,13 +62,15 @@ class GameBoard(tk.Frame):
         return
 
     def refresh(self, event):
+        """updates the layout values whenever the window size changes"""
         self.layout = self.get_game_layout(
             window_w=self.mainWindow.winfo_width(), window_h=self.mainWindow.winfo_height(), n_rows=self.n_rows,
             n_cols=self.n_cols, last_layout=self.layout)
         return
 
     def draw_board(self, event):
-        """Redraw the board, possibly in response to window being resized"""
+        """Draw/update the game board with layout dimensions of the current window size"""
+
         self.board.delete('square')
         self.board.config(width=self.layout['board_ext_w'], height=self.layout['board_ext_h'])
         # create row and column labels
@@ -107,31 +108,36 @@ class GameBoard(tk.Frame):
 
         if self.highlighter is not None:
             self.board.delete(self.highlighter)
-            self.highlighter = self.create_highlighter(self.board, self.layout['click_coords'])
-
-
+            self.highlighter = self.create_highlighter(self.board, self.layout['field_idx'])
         return
 
     def draw_panel(self, event):
-        """Redraw the board, possibly in response to window being resized"""
-        # undo/redo buttons
-        self.panel.delete('button')
-        self.panel.config(width=self.layout['panel_w'] + self.layout['label_w'], height=self.layout['board_ext_h'])
-        undo_x = 0.25 * self.layout['panel_w']
-        undo_y = self.layout['label_w']
-        redo_x = undo_x
-        redo_y = undo_y + self.layout['label_w']
+        """Draw/update the panel with layout dimensions of the current window size"""
+        # delete all buttons in case of resized window
+        self.panel.delete('panel')
 
-        b_undo = self.make_button(
-            button_name='UNDO', button_method=self.clickUndo, canvas=self.panel, x=undo_x, y=undo_y, anchor='w')
-        b_redo = self.make_button(
-            button_name='REDO', button_method=self.clickRedo, canvas=self.panel, x=undo_x, y=redo_y, anchor='w')
-        # self.board.create_rectangle(
-        #     undo_x - 2 * self.layout['label_w'],
-        #     undo_y + 2 * self.layout['label_w'],
-        #     redo_x + 2 * self.layout['label_w'],
-        #     redo_y - 2 * self.layout['label_w']
-        # )
+        # resize the panel
+        self.panel.config(width=self.layout['panel_w'] + self.layout['label_w'], height=self.layout['board_ext_h'])
+
+        pad = 5
+
+        # create new buttons at updated positions
+        undo_x = 3 * pad
+        undo_y = 3 * pad
+        redo_y = 9 * pad
+
+        self.make_button(
+            button_name='UNDO', button_method=self.clickUndo,
+            canvas=self.panel, x=undo_x, y=undo_y, anchor='nw', tags='panel')
+        self.make_button(
+            button_name='REDO', button_method=self.clickRedo,
+            canvas=self.panel, x=undo_x, y=redo_y, anchor='nw', tags='panel')
+
+        # create rectangle around panel border
+        rect_coords = (
+            pad, pad, self.layout['panel_w'] - 2 * pad, self.layout['board_ext_h'] - pad
+        )
+        self.panel.create_rectangle(rect_coords, tags='panel')
         return
 
     @staticmethod
@@ -156,18 +162,14 @@ class GameBoard(tk.Frame):
         layout['board_h'] = layout['board_w']
         layout['board_ext_h'] = int(window_square_length)
         layout['board_ext_w'] = int(layout['board_w'] + layout['label_w'])
-        layout['panel_x'] = int(layout['board_ext_w'] + layout['label_w'])
+        layout['panel_x'] = int(layout['board_ext_w'])
         layout['panel_w'] = int(window_w - layout['panel_x'])
         layout['total_w'] = int(layout['panel_x'] + layout['panel_w'])
-        if last_layout is None:
-            layout['click_coords'] = (0, 0)
-        else:
-            x, y = last_layout['click_coords']
-            layout['click_coords'] = (x * layout['scale'], y * layout['scale'])
+        layout['field_idx'] = last_layout['field_idx'] if last_layout is not None else (0, 0)
         return layout
 
     @staticmethod
-    def make_button(button_name, button_method, canvas, x, y, anchor='c'):
+    def make_button(button_name, button_method, canvas, x, y, anchor='c', tags=''):
         """creates a button with a name and method
         Arguments:
             button_name: (str) the name of the button
@@ -179,7 +181,7 @@ class GameBoard(tk.Frame):
             button: tkinter button widget
         """
         button = tk.Button(canvas, text=button_name)
-        canvas.create_window(x, y, window=button, tags='button', anchor=anchor)
+        canvas.create_window(x, y, window=button, tags=tags, anchor=anchor)
         button.bind('<Button-1>', button_method)
         return button
 
@@ -194,12 +196,12 @@ class GameBoard(tk.Frame):
         field_idx = self.coord2field(event)
         if field_idx is None:
             return
-        self.layout['click_coords'] = (event.x, event.y)
+        self.layout['field_idx'] = field_idx
         piece = self.board_state[field_idx]
         field_name = self.field_names[field_idx]
         if self.click_idx == 0:
             if piece:
-                self.highlighter = self.create_highlighter(canvas=self.board, click_coords=self.layout['click_coords'])
+                self.highlighter = self.create_highlighter(canvas=self.board, field_idx=self.layout['field_idx'])
                 print('clicked on {} on field {}'.format(piece.name, field_idx))
                 self.piece = piece
                 self.click_idx += 1
@@ -223,9 +225,14 @@ class GameBoard(tk.Frame):
                 self.final_move = GameOps.move_count - 1
                 self.redo_move = self.final_move
                 GameOps.save_state()
-            self.click_idx = 0
-            self.board.delete(self.highlighter)
+            self.end_move()
+            self.remove_highlighter()
         return
+
+    def end_move(self):
+        self.click_idx = 0
+        return
+
 
     def coord2field(self, event):
         """converts the event coordinates to the corresponding game board field index
@@ -242,30 +249,43 @@ class GameBoard(tk.Frame):
             field_idx = None
         return field_idx
 
-    def create_highlighter(self, canvas, click_coords):
-        return canvas.create_rectangle(self.rectangle_coords(click_coords), width=4, tags='square')
+    def create_highlighter(self, canvas, field_idx):
+        """creates a highlighter for the currently selected piece"""
+        return canvas.create_rectangle(self.rectangle_field_coords(field_idx), width=4, tags='square')
 
-    def rectangle_coords(self, coords):
-        x, y = coords
-        x_0 = int((x - self.layout['label_w']) / self.layout['field_w']) * self.layout['field_w'] + self.layout['label_w']
-        y_0 = int(y / self.layout['field_w'] + 1) * self.layout['field_w']
+    def remove_highlighter(self):
+        self.board.delete(self.highlighter)
+        self.highlighter = None
+        self.layout['field_idx'] = (None, None)
+        return
+
+    def rectangle_field_coords(self, field_idx):
+        """gives the rectangle coordinates for a field at field_idx on the game board"""
+        row, col = field_idx
+        x_0 = self.layout['board_x'] + col * self.layout['field_w']
+        y_0 = (self.n_rows - row) * self.layout['field_w']
         x_1 = x_0 + self.layout['field_w']
         y_1 = y_0 - self.layout['field_w']
         return x_0, y_0, x_1, y_1
 
     def addpiece(self, name, image, field_idx):
-        """Add a piece to the playing board"""
+        """Add a piece to the game board"""
         self.board.create_image(0, 0, image=image, tags=(name, 'piece'), anchor='c')
         self.placepiece(name, (field_idx[0][0], field_idx[1][0]))
 
     @classmethod
     def addimages(cls, piece_images, piece_image_paths):
+        """Save images and paths"""
         cls.piece_images = piece_images
         cls.piece_image_paths = piece_image_paths
         return
 
     def placepiece(self, name, field_idx):
-        """Place a piece at the given row/column"""
+        """Place a piece at the given row/column from field_idx
+        Arguments:
+             name: (str) the piece's 3 character short name
+             field_idx: (tuple) the (row, column) where to place the piece
+        """
         row = abs(field_idx[0] - 7)
         column = field_idx[1]
         self.pieces[name] = (row, column)
@@ -274,6 +294,12 @@ class GameBoard(tk.Frame):
         self.board.coords(name, x0, y0)
 
     def loadStates(self, state_count):
+        """loads a specific state of the current game
+        Arguments:
+            state_count: (int) the index for the specific game state to load
+        """
+        self.end_move()
+        self.remove_highlighter()
         if not self.final_move >= state_count >= -1:
             print('cannot progress further')
             return
@@ -304,11 +330,13 @@ class GameBoard(tk.Frame):
         return
 
     def clickUndo(self, event):
+        """method for the UNDO button that loads the last game state"""
         state_count = self.redo_move - 1
         self.loadStates(state_count)
         return
 
     def clickRedo(self, event):
+        """method for the REDO button that loads the next game state"""
         state_count = self.redo_move + 1
         self.loadStates(state_count)
         return
