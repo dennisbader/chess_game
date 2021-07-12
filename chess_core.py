@@ -356,60 +356,60 @@ class GameOps(metaclass=IterRegistry):
         self.move_types(move_to)
 
     @abc.abstractmethod
-    def move_types(self):
+    def move_types(self, move_to):
         """defines the move set of a specific chess piece"""
         pass
 
 
 class Pawn(GameOps):
-    """
-    possible_moves = [v,h]: v = vertical, h = horizontal
+    """Pawn has different move sets depending on the current game situation:
+        1) if Pawn has not moved yet: Pawn can move one or two steps vertically
+        2) if Pawn has already moved: Pawn can move one step vertically
+        3) Pawn can onl kill in a one-step positive (relative to the black/white) diagonal direction
     """
     normal_moves = [[1, 0]]
     special_moves = [[2, 0]]
     kill_moves = [[1, -1], [1, 1]]
 
     def move_types(self, move_to, mate_checker=True):
-        """changes the possible moves according to the current move_idx"""
-        if self.move_idx == 0:
+        if self.move_idx == 0:  # case 1)
             self.possible_moves = self.normal_moves + self.special_moves + self.kill_moves
-        else:
+        else:  # case 2)
             self.possible_moves = self.normal_moves + self.kill_moves
         if self.color == 2:  # black
             self.possible_moves = [[-i for i in m] for m in self.possible_moves]
-        # exclude kill moves if it's not possible
+
+        # exclude invalid moves
+        kill_moves = self.possible_moves[-2:]
         move_vector = list(self.get_move_step(move_to))
         move_to_idx = self.get_field_idx(move_to)
-        kill_move_excluder = False
-        if self.board_objects[move_to_idx] is None:
-            kill_move_excluder = True
+        if move_vector in kill_moves:
+            # Pawn can only move diagonally if it kills another Piece
+            if self.board_objects[move_to_idx] is None or self.board_objects[move_to_idx].color == self.color:
+                self.possible_moves = []
         else:
-            if not (move_vector in self.possible_moves[1:] and self.board_objects[move_to_idx].color != self.color):
-                kill_move_excluder = True
-        if kill_move_excluder:
-            self.possible_moves = self.possible_moves[:-2]
-        # exclude vertical kills
-        vertical_move_excluder = False
-        if self.board_objects[move_to_idx]:
-            if move_vector == self.possible_moves[0] and self.board_objects[move_to_idx].color != self.color:
-                vertical_move_excluder = True
-        if vertical_move_excluder:
-            self.possible_moves = self.possible_moves[1:]
+            # Pawn can only move if field is not occupied
+            if self.board_objects[move_to_idx] is not None:
+                self.possible_moves = []
         return
 
 
 class Rook(GameOps):
-    possible_moves = []
+    """Rook can move either horizontally or vertically"""
 
     def move_types(self, move_to, mate_checker=True):
         move_vector = list(self.get_move_step(move_to))
-        if bool(move_vector[0]) != bool(move_vector[1]):  # if 1 direcetion is 0 -> either horizontal or vertical
+        if bool(move_vector[0]) != bool(move_vector[1]):  # vertical-only or horizontal-only
             self.possible_moves = [move_vector]
         return
 
 
 class Knight(GameOps):
-    possible_moves = []
+    """Knight has eight possible moves (with different signs) coming from two major move types:
+        1) Two horizontal steps, one vertical step
+        1) Two vertical steps, one horizontal step
+    """
+
     normal_moves = [[2, -1], [2, 1], [1, 2], [-1, 2], [-2, -1], [-2, 1], [1, -2], [-1, -2]]
 
     def move_types(self, move_to, mate_checker=True):
@@ -418,7 +418,7 @@ class Knight(GameOps):
 
 
 class Bishop(GameOps):
-    possible_moves = []
+    """Bishop can move diagonally"""
 
     def move_types(self, move_to, mate_checker=True):
         move_vector = list(self.get_move_step(move_to))
@@ -428,7 +428,7 @@ class Bishop(GameOps):
 
 
 class Queen(GameOps):
-    possible_moves = []
+    """King can move in any direction"""
 
     def move_types(self, move_to, mate_checker=True):
         move_vector = list(self.get_move_step(move_to))
@@ -439,7 +439,11 @@ class Queen(GameOps):
 
 
 class King(GameOps):
-    possible_moves = []
+    """King can has two move types:
+        1) move one step in any direction
+        2) King can do a rochade once if King has not been in check, has not moved yet and rochade is a valid move
+    """
+
     normal_moves = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]
     rochade = [[0, -2], [0, 2]]
 
