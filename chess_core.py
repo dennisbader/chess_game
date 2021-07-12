@@ -269,7 +269,7 @@ class GameOps(metaclass=IterRegistry):
         self.board_gui.piece_images[self.short_name] = ''
         self.board_gui.piece_images[p.short_name] \
             = tk.PhotoImage(file=queen_white_fin if self.color == 1 else queen_black_fin)
-        self.board_gui.addpiece(p.short_name, self.board_gui.piece_images[p.short_name], p.field_idx)
+        self.board_gui.add_piece(p.short_name, self.board_gui.piece_images[p.short_name], p.field_idx)
         mate_board = self.board_objects.copy()
         return mate_board
 

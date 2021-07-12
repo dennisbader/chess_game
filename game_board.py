@@ -102,7 +102,7 @@ class GameBoard(tk.Frame):
 
         # place all pieces
         for name in self.pieces:
-            self.placepiece(name, (abs(self.pieces[name][0]-7), self.pieces[name][1]))
+            self.place_piece(name, (abs(self.pieces[name][0]-7), self.pieces[name][1]))
         self.board.tag_raise('piece')
         self.board.tag_lower('square')
 
@@ -127,10 +127,10 @@ class GameBoard(tk.Frame):
         redo_y = 9 * pad
 
         self.make_button(
-            button_name='UNDO', button_method=self.clickUndo,
+            button_name='UNDO', button_method=self.click_undo,
             canvas=self.panel, x=undo_x, y=undo_y, anchor='nw', tags='panel')
         self.make_button(
-            button_name='REDO', button_method=self.clickRedo,
+            button_name='REDO', button_method=self.click_redo,
             canvas=self.panel, x=undo_x, y=redo_y, anchor='nw', tags='panel')
 
         # create rectangle around panel border
@@ -194,7 +194,7 @@ class GameBoard(tk.Frame):
         """
         if GameOps.is_checkmate:
             return
-        field_idx = self.coord2field(event)
+        field_idx = self.coord_to_field(event)
         if field_idx is None:
             return
         self.layout['field_idx'] = field_idx
@@ -214,10 +214,10 @@ class GameBoard(tk.Frame):
             if self.valid_move:
                 if self.kill is not None:
                     self.piece_images[self.kill.short_name] = ''
-                self.placepiece(self.piece.short_name, field_idx)
+                self.place_piece(self.piece.short_name, field_idx)
                 if GameOps.is_rochade_gui:
                     rochade_field_idx = GameOps.rochade_rook.get_field_idx(GameOps.rochade_move_to)
-                    self.placepiece(GameOps.rochade_rook.short_name, rochade_field_idx)
+                    self.place_piece(GameOps.rochade_rook.short_name, rochade_field_idx)
                     GameOps.is_rochade_gui = False
                     GameOps.is_rochade = False
                 self.valid_move = False
@@ -233,8 +233,7 @@ class GameBoard(tk.Frame):
         self.click_idx = 0
         return
 
-
-    def coord2field(self, event):
+    def coord_to_field(self, event):
         """converts the event coordinates to the corresponding game board field index
         Arguments:
             event: left mouse click event on game board
@@ -270,20 +269,20 @@ class GameBoard(tk.Frame):
         y_1 = y_0 - self.layout['field_w']
         return x_0, y_0, x_1, y_1
 
-    def addpiece(self, name, image, field_idx):
+    def add_piece(self, name, image, field_idx):
         """Add a piece to the game board"""
         self.board.create_image(0, 0, image=image, tags=(name, 'piece'), anchor='c')
-        self.placepiece(name, (field_idx[0], field_idx[1]))
+        self.place_piece(name, (field_idx[0], field_idx[1]))
         return
 
     @classmethod
-    def addimages(cls, piece_images, piece_image_paths):
+    def add_images(cls, piece_images, piece_image_paths):
         """Save images and paths"""
         cls.piece_images = piece_images
         cls.piece_image_paths = piece_image_paths
         return
 
-    def placepiece(self, name, field_idx):
+    def place_piece(self, name, field_idx):
         """Place a piece at the given row/column from field_idx
         Arguments:
              name: (str) the piece's 3 character short name
@@ -297,7 +296,7 @@ class GameBoard(tk.Frame):
         self.board.coords(name, x0, y0)
         return
 
-    def loadStates(self, state_count):
+    def load_states(self, state_count):
         """loads a specific state of the current game
         Arguments:
             state_count: (int) the index for the specific game state to load
@@ -330,17 +329,17 @@ class GameBoard(tk.Frame):
         self.board.delete('piece')
         for p in GameOps:
             self.piece_images[p.short_name] = tk.PhotoImage(file=p.img_file)
-            self.addpiece(p.short_name, self.piece_images[p.short_name], p.field_idx)
+            self.add_piece(p.short_name, self.piece_images[p.short_name], p.field_idx)
         return
 
-    def clickUndo(self, event):
+    def click_undo(self, event):
         """method for the UNDO button that loads the last game state"""
         state_count = self.redo_move - 1
-        self.loadStates(state_count)
+        self.load_states(state_count)
         return
 
-    def clickRedo(self, event):
+    def click_redo(self, event):
         """method for the REDO button that loads the next game state"""
         state_count = self.redo_move + 1
-        self.loadStates(state_count)
+        self.load_states(state_count)
         return

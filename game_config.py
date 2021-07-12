@@ -42,6 +42,6 @@ class ChessConfig:
         for piece in pieces:
             piece_images[piece.short_name] = tk.PhotoImage(file=piece.img_file)
             piece_image_paths[piece.short_name[:3]] = piece.img_file
-            board_gui.addpiece(piece.short_name, piece_images[piece.short_name], piece.field_idx)
-        board_gui.addimages(piece_images, piece_image_paths)
+            board_gui.add_piece(piece.short_name, piece_images[piece.short_name], piece.field_idx)
+        board_gui.add_images(piece_images, piece_image_paths)
         return
