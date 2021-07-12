@@ -145,7 +145,7 @@ class GameOps(metaclass=IterRegistry):
             intermediate_steps.append(self.get_field_name(field_idx))
 
         if 'Knight' in self.name:  # Knight jumps over
-            intermediate_steps = [intermediate_steps[-1]]
+            intermediate_steps = [move_to]
         return intermediate_steps
 
     def move_validity(self, intermediate_steps, color, request_text=True):
