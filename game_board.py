@@ -24,7 +24,7 @@ class GameBoard(tk.Frame):
         self.color1 = color1
         self.color2 = color2
         self.pieces = {}
-        self.piece = None
+        self.piece_selected = None
         self.click_idx = 0
         self.valid_move = False
         self.kill = None
@@ -203,18 +203,18 @@ class GameBoard(tk.Frame):
         if self.click_idx == 0:
             if piece:
                 self.highlighter = self.create_highlighter(canvas=self.board, field_idx=self.layout['field_idx'])
-                print('clicked on {} on field {}'.format(piece.name, field_idx))
-                self.piece = piece
+                # print('clicked on {} on field {}'.format(piece.name, field_idx))
+                self.piece_selected = piece
                 self.click_idx += 1
             else:
-                self.piece = None
+                self.piece_selected = None
                 print('no piece on field {}'.format(field_idx))
         else:
-            self.piece.move(field_name)
+            self.piece_selected.move(field_name)
             if self.valid_move:
                 if self.kill is not None:
                     self.piece_images[self.kill.short_name] = ''
-                self.place_piece(self.piece.short_name, field_idx)
+                self.place_piece(self.piece_selected.short_name, field_idx)
                 if GameOps.is_rochade_gui:
                     rochade_field_idx = GameOps.rochade_rook.get_field_idx(GameOps.rochade_move_to)
                     self.place_piece(GameOps.rochade_rook.short_name, rochade_field_idx)

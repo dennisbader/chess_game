@@ -1,4 +1,5 @@
 import os
+import abc
 import numpy as np
 
 import tkinter as tk
@@ -11,10 +12,14 @@ class IterRegistry(type):
 
 
 class GameOps(metaclass=IterRegistry):
+    """Contains the entire game logic and piece objects
+    """
+
     pieces = []
     column_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+    row_chars = [str(i) for i in range(1, len(column_chars) + 1)]
     move_count = 0
-    # saves if white/black were already in check (for rochade): [white (True/False), black (True/False)]
+    # saves if white/black were already in check (for rochade): idx 0 -> white, idx 1 -> black]
     was_checked = [False, False]
     is_rochade, is_rochade_gui = False, False
     rochade_rook = None
@@ -25,37 +30,40 @@ class GameOps(metaclass=IterRegistry):
     save_file = os.path.join(os.path.dirname(__file__), 'saved_state.pkl')
 
     def __init__(self, name, short_name, color, current_field, img_file):
-        """Init Description
-
-        :param name: piece name
-        :param color: 1 for white, 2 for black
-        :param current_field: piece's starter field
+        """Creates a chess piece object
+        Arguments:
+            name: piece name long
+            short_name: piece name short
+            color: 1 for white, 2 for black
+            current_field: piece's start field
+            img_file: path to the piece's image
         """
         self.pieces.append(self)
         self.name = name
         self.short_name = short_name
         self.color = color
+        self.img_file = img_file
+        self.is_alive = True
+        self.checks = False
+        self.promote = False  # promote pawn into another piece
+
+        self.field_names = self.get_field_names(row_chars=self.row_chars, column_chars=self.column_chars)
         self.current_field = current_field
         self.last_field = current_field
-        self.field_names = np.array([['{}{}'.format(i,j) for i in self.column_chars] for j in range(1,8+1)])
         self.field_idx = self.get_field_idx(self.current_field)
-        self.move_idx = 0
-        self.is_alive = 1
         self.possible_moves = []
-        self.checks = False
-        self.img_file = img_file
-        self.transform = False
 
-    def get_field_idx(self, target_field):
-        field_idx = np.where(self.field_names == target_field)
-        return tuple([field_idx[0][0], field_idx[1][0]])
+        self.move_idx = 0
+
+    @staticmethod
+    def get_field_names(row_chars, column_chars):
+        return np.array([['{}{}'.format(col, row) for col in column_chars] for row in row_chars])
 
     @classmethod
     def initialize_game(cls, board_objects, board_gui):
         cls.board_objects = board_objects
         cls.board_gui = board_gui
         cls.save_state(initializer=True)
-
 
     @classmethod
     def save_state(cls, initializer=False):
@@ -67,16 +75,22 @@ class GameOps(metaclass=IterRegistry):
             saved_state = dict()
         saved_state[move_count] = {
             'board': cls.board_objects.copy(),
-            'pieces': [p for p in GameOps],
-            'globalVars': cls.get_globalVars()
+            'pieces': [piece for piece in GameOps],
+            'globalVars': cls.get_global_vars()
         }
 
-        with open(cls.save_file, 'ab') as fout:
-            pickle.dump(saved_state, fout, -1)
+        with open(cls.save_file, 'ab') as f_out:
+            pickle.dump(saved_state, f_out, -1)
         return
 
     @classmethod
-    def get_globalVars(cls):
+    def load_state(cls, move_counter=False):
+        with open(cls.save_file, 'rb') as f_in:
+            _saved_state = pickle.load(f_in)
+        return _saved_state
+
+    @classmethod
+    def get_global_vars(cls):
         global_vars = {
             'move_count': cls.move_count,
             'was_checked': cls.was_checked.copy(),
@@ -90,18 +104,16 @@ class GameOps(metaclass=IterRegistry):
         }
         return global_vars
 
-    @classmethod
-    def load_state(cls, move_counter=False):
-        with open(cls.save_file, 'rb') as fin:
-            _saved_state = pickle.load(fin)
-        return _saved_state
-
     @staticmethod
     def move_counter():
         GameOps.move_count += 1
 
     def get_field_name(self, field_idx):
         return self.field_names[field_idx]
+
+    def get_field_idx(self, target_field):
+        field_idx = np.where(self.field_names == target_field)
+        return tuple([field_idx[0][0], field_idx[1][0]])
 
     def description(self):
         print('{}, {}'.format(self.name, 'white' if self.color == 1 else 'black'))
@@ -175,15 +187,13 @@ class GameOps(metaclass=IterRegistry):
             return 2, valid_text
 
     def resurrect_piece(self, enemy):
-        enemy.is_alive = 1
+        enemy.is_alive = True
         enemy.current_field = self.current_field
         enemy.field_idx = self.field_idx
         return
 
-    def piece_move_types(self, move_to):
-        self.move_types(move_to)
-
-    def is_check(self, color):
+    @staticmethod
+    def is_check(color):
         check = False
         for piece in GameOps:
             if 'King' in piece.name and piece.color == color:
@@ -224,7 +234,7 @@ class GameOps(metaclass=IterRegistry):
 
     @staticmethod
     def kill_piece(enemy):
-        enemy.is_alive = 0
+        enemy.is_alive = False
         enemy.current_field = 'Out of field'
         enemy.field_idx = None
         return
@@ -251,11 +261,11 @@ class GameOps(metaclass=IterRegistry):
             print('{} is check mate. Congrats!'.format('White' if color == 1 else 'Black'))
         return
 
-    def check_pawn2queen(self, transformer=False):
+    def check_pawn2queen(self, promoter=False):
         if 'Pawn' in self.name and any(row in self.current_field for row in ['1','8']):
-            self.transform, transformer = True, True
+            self.promote, promoter = True, True
             GameOps.queen_counter += 1
-        return transformer
+        return promoter
 
     def pawn2queen(self):
         color_text = 'White' if self.color == 1 else 'Black'
@@ -342,20 +352,22 @@ class GameOps(metaclass=IterRegistry):
         print('')
         return
 
+    def piece_move_types(self, move_to):
+        self.move_types(move_to)
+
+    @abc.abstractmethod
+    def move_types(self):
+        """defines the move set of a specific chess piece"""
+        pass
+
 
 class Pawn(GameOps):
     """
     possible_moves = [v,h]: v = vertical, h = horizontal
     """
-    normal_moves = [[1,0]]
-    special_moves = [[2,0]]
-    kill_moves = [[1,-1],[1,1]]
-
-    def move(self, move_to):
-        super().move(move_to)
-
-    def piece_move_types(self, move_to):
-        super().piece_move_types(move_to)
+    normal_moves = [[1, 0]]
+    special_moves = [[2, 0]]
+    kill_moves = [[1, -1], [1, 1]]
 
     def move_types(self, move_to, mate_checker=True):
         """changes the possible moves according to the current move_idx"""
@@ -363,13 +375,13 @@ class Pawn(GameOps):
             self.possible_moves = self.normal_moves + self.special_moves + self.kill_moves
         else:
             self.possible_moves = self.normal_moves + self.kill_moves
-        if self.color == 2:
+        if self.color == 2:  # black
             self.possible_moves = [[-i for i in m] for m in self.possible_moves]
         # exclude kill moves if it's not possible
         move_vector = list(self.get_move_step(move_to))
         move_to_idx = self.get_field_idx(move_to)
         kill_move_excluder = False
-        if not self.board_objects[move_to_idx]:
+        if self.board_objects[move_to_idx] is None:
             kill_move_excluder = True
         else:
             if not (move_vector in self.possible_moves[1:] and self.board_objects[move_to_idx].color != self.color):
@@ -389,12 +401,6 @@ class Pawn(GameOps):
 class Rook(GameOps):
     possible_moves = []
 
-    def move(self, move_to):
-        super().move(move_to)
-
-    def piece_move_types(self, move_to):
-        super().piece_move_types(move_to)
-
     def move_types(self, move_to, mate_checker=True):
         move_vector = list(self.get_move_step(move_to))
         if bool(move_vector[0]) != bool(move_vector[1]):  # if 1 direcetion is 0 -> either horizontal or vertical
@@ -404,13 +410,7 @@ class Rook(GameOps):
 
 class Knight(GameOps):
     possible_moves = []
-    normal_moves = [[2,-1],[2,1],[1,2],[-1,2],[-2,-1],[-2,1],[1,-2],[-1,-2]]
-
-    def move(self, move_to):
-        super().move(move_to)
-
-    def piece_move_types(self, move_to):
-        super().piece_move_types(move_to)
+    normal_moves = [[2, -1], [2, 1], [1, 2], [-1, 2], [-2, -1], [-2, 1], [1, -2], [-1, -2]]
 
     def move_types(self, move_to, mate_checker=True):
         self.possible_moves = self.normal_moves
@@ -419,12 +419,6 @@ class Knight(GameOps):
 
 class Bishop(GameOps):
     possible_moves = []
-
-    def move(self, move_to):
-        super().move(move_to)
-
-    def piece_move_types(self, move_to):
-        super().piece_move_types(move_to)
 
     def move_types(self, move_to, mate_checker=True):
         move_vector = list(self.get_move_step(move_to))
@@ -436,12 +430,6 @@ class Bishop(GameOps):
 class Queen(GameOps):
     possible_moves = []
 
-    def move(self, move_to):
-        super().move(move_to)
-
-    def piece_move_types(self, move_to):
-        super().piece_move_types(move_to)
-
     def move_types(self, move_to, mate_checker=True):
         move_vector = list(self.get_move_step(move_to))
         if abs(move_vector[0]) == abs(move_vector[1]) and move_vector[0] != 0 or \
@@ -452,14 +440,8 @@ class Queen(GameOps):
 
 class King(GameOps):
     possible_moves = []
-    normal_moves = [[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]]
-    rochade = [[0,-2],[0,2]]
-
-    def move(self, move_to):
-        super().move(move_to)
-
-    def piece_move_types(self, move_to):
-        super().piece_move_types(move_to)
+    normal_moves = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]
+    rochade = [[0, -2], [0, 2]]
 
     def move_types(self, move_to, mate_checker=True):
         if self.move_idx == 0:
