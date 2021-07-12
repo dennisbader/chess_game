@@ -23,7 +23,7 @@ class GameOps(metaclass=IterRegistry):
     was_checked = [False, False]
     is_rochade, is_rochade_gui = False, False
     rochade_rook = None
-    rochade_move_to = None
+    rochade_rook_move_to = None
     rochade_field_idx = None
     queen_counter = 0
     is_checkmate = False
@@ -97,7 +97,7 @@ class GameOps(metaclass=IterRegistry):
             'is_rochade': cls.is_rochade,
             'is_rochade_gui': cls.is_rochade_gui,
             'rochade_rook': cls.rochade_rook,
-            'rochade_move_to': cls.rochade_move_to,
+            'rochade_rook_move_to': cls.rochade_rook_move_to,
             'rochade_field_idx': cls.rochade_field_idx,
             'queen_counter': cls.queen_counter,
             'is_checkmate': cls.is_checkmate
@@ -294,7 +294,7 @@ class GameOps(metaclass=IterRegistry):
             if move_isvalid:
                 mate_board = self.move_piece(move_to, move_isvalid)
                 if GameOps.is_rochade and mate_checker:
-                    GameOps.rochade_rook.move_piece(GameOps.rochade_move_to, 1, in_rochade=True)
+                    GameOps.rochade_rook.move_piece(GameOps.rochade_rook_move_to, 1, in_rochade=True)
                 if self.is_check(self.color):
                     self.redo_move(mate_board, move_isvalid)
                     for index, x in np.ndenumerate(self.board_objects):
@@ -360,6 +360,30 @@ class GameOps(metaclass=IterRegistry):
         """defines the move set of a specific chess piece"""
         pass
 
+    @staticmethod
+    def is_diagonal(move_vector):
+        """diagonal with same steps in vertical as horizontal direction"""
+        move_v, move_h = move_vector
+        return abs(move_v) == abs(move_h) and move_v != 0
+
+    @staticmethod
+    def is_straight(move_vector):
+        """either vertical or horizontal direction"""
+        move_v, move_h = move_vector
+        return bool(move_v) != bool(move_h)
+
+    @staticmethod
+    def is_vertical(move_vector):
+        """vertical direction"""
+        move_v, move_h = move_vector
+        return move_v != 0 and move_h == 0
+
+    @staticmethod
+    def is_horizontal(move_vector):
+        """horizontal direction"""
+        move_v, move_h = move_vector
+        return move_v == 0 and move_h != 0
+
 
 class Pawn(GameOps):
     """Pawn has different move sets depending on the current game situation:
@@ -385,7 +409,7 @@ class Pawn(GameOps):
         move_to_idx = self.get_field_idx(move_to)
         if move_vector in kill_moves:
             # Pawn can only move diagonally if it kills another Piece
-            if self.board_objects[move_to_idx] is None or self.board_objects[move_to_idx].color == self.color:
+            if self.board_objects[move_to_idx] is None:
                 self.possible_moves = []
         else:
             # Pawn can only move if field is not occupied
@@ -395,11 +419,11 @@ class Pawn(GameOps):
 
 
 class Rook(GameOps):
-    """Rook can move either horizontally or vertically"""
+    """Rook can move either horizontally or vertically (straight)"""
 
     def move_types(self, move_to, mate_checker=True):
         move_vector = list(self.get_move_step(move_to))
-        if bool(move_vector[0]) != bool(move_vector[1]):  # vertical-only or horizontal-only
+        if self.is_straight(move_vector):  # vertical-only or horizontal-only
             self.possible_moves = [move_vector]
         return
 
@@ -422,18 +446,17 @@ class Bishop(GameOps):
 
     def move_types(self, move_to, mate_checker=True):
         move_vector = list(self.get_move_step(move_to))
-        if abs(move_vector[0]) == abs(move_vector[1]) and move_vector[0] != 0:
+        if self.is_diagonal(move_vector):
             self.possible_moves = [move_vector]
         return
 
 
 class Queen(GameOps):
-    """King can move in any direction"""
+    """Queen can move in any direction (diagonal, vertical, horizontal)"""
 
     def move_types(self, move_to, mate_checker=True):
         move_vector = list(self.get_move_step(move_to))
-        if abs(move_vector[0]) == abs(move_vector[1]) and move_vector[0] != 0 or \
-                bool(move_vector[0]) != bool(move_vector[1]):
+        if self.is_diagonal(move_vector) or self.is_straight(move_vector):
             self.possible_moves = [move_vector]
         return
 
@@ -448,20 +471,33 @@ class King(GameOps):
     rochade = [[0, -2], [0, 2]]
 
     def move_types(self, move_to, mate_checker=True):
+        self.possible_moves = self.normal_moves
         if self.move_idx == 0:
-            self.possible_moves = self.normal_moves
             move_vector = list(self.get_move_step(move_to))
-            move_to_idx = self.get_field_idx(move_to)
-            if move_vector in self.rochade and not GameOps.was_checked[self.color - 1] and mate_checker:
-                rooks = [p for p in GameOps if 'Rook' in p.name and p.color == self.color]
-                for rook in rooks:
-                    if move_vector[-1] > 0 and '2' in rook.name \
-                            or move_vector[-1] < 0 and '1' in rook.name and rook.move_idx == 0:
-                        self.possible_moves = self.normal_moves + [move_vector]
-                        GameOps.is_rochade = True
-                        GameOps.is_rochade_gui = True
-                        GameOps.rochade_rook = rook
-                        rochade_idx = (move_to_idx[0], move_to_idx[1] - int(move_vector[1]/2))
-                        GameOps.rochade_move_to = self.get_field_name(rochade_idx)
-        else:
-            self.possible_moves = self.normal_moves
+            is_rochade, rook_rochade = self.check_rochade(move_vector, mate_checker)
+            if is_rochade:
+                self.possible_moves = self.normal_moves + [move_vector]
+                self.set_rochade(move_vector, rook_rochade)
+        return
+
+    def check_rochade(self, move_vector, mate_checker):
+        """checks whether the move is a valid rochade"""
+        move_v, move_h = move_vector
+        is_rochade, rook_rochade = False, None
+        if move_vector in self.rochade and not GameOps.was_checked[self.color - 1] and mate_checker:
+            rooks = [p for p in GameOps if 'Rook' in p.name and p.color == self.color and p.is_alive]
+            for rook in rooks:
+                if (move_h > 0 and '2' in rook.name) or (move_h < 0 and '1' in rook.name) and rook.move_idx == 0:
+                    is_rochade = True
+                    rook_rochade = rook
+                    break
+        return is_rochade, rook_rochade
+
+    def set_rochade(self, move_vector, rook_rochade):
+        """sets all required settings for the rochade"""
+        GameOps.is_rochade = True
+        GameOps.is_rochade_gui = True
+        GameOps.rochade_rook = rook_rochade
+        rochade_idx = (self.field_idx[0], self.field_idx[1] + int(move_vector[1] / 2))
+        GameOps.rochade_rook_move_to = self.get_field_name(rochade_idx)
+        return

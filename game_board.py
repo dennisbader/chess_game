@@ -216,7 +216,7 @@ class GameBoard(tk.Frame):
                     self.piece_images[self.kill.short_name] = ''
                 self.place_piece(self.piece_selected.short_name, field_idx)
                 if GameOps.is_rochade_gui:
-                    rochade_field_idx = GameOps.rochade_rook.get_field_idx(GameOps.rochade_move_to)
+                    rochade_field_idx = GameOps.rochade_rook.get_field_idx(GameOps.rochade_rook_move_to)
                     self.place_piece(GameOps.rochade_rook.short_name, rochade_field_idx)
                     GameOps.is_rochade_gui = False
                     GameOps.is_rochade = False
@@ -318,7 +318,7 @@ class GameBoard(tk.Frame):
         GameOps.is_rochade, GameOps.is_rochade_gui = state['globalVars']['is_rochade'],\
                                                  state['globalVars']['is_rochade_gui']
         GameOps.rochade_rook = state['globalVars']['rochade_rook']
-        GameOps.rochade_move_to = state['globalVars']['rochade_move_to']
+        GameOps.rochade_rook_move_to = state['globalVars']['rochade_rook_move_to']
         GameOps.rochade_field_idx = state['globalVars']['rochade_field_idx']
         GameOps.queen_counter = state['globalVars']['queen_counter']
         GameOps.is_checkmate = state['globalVars']['is_checkmate']
