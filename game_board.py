@@ -158,6 +158,7 @@ class GameBoard(tk.Frame):
         layout['field_w'] = field_w
         layout['label_w'] = int(layout['field_w'] / 2)
         layout['board_x'] = layout['label_w']
+        layout['board_y'] = 0  # 0 for now
         layout['board_w'] = int(n_cols * layout['field_w'])
         layout['board_h'] = layout['board_w']
         layout['board_ext_h'] = int(window_square_length)
@@ -216,7 +217,6 @@ class GameBoard(tk.Frame):
                 self.placepiece(self.piece.short_name, field_idx)
                 if GameOps.is_rochade_gui:
                     rochade_field_idx = GameOps.rochade_rook.get_field_idx(GameOps.rochade_move_to)
-                    rochade_field_idx = (rochade_field_idx[0][0], rochade_field_idx[1][0])
                     self.placepiece(GameOps.rochade_rook.short_name, rochade_field_idx)
                     GameOps.is_rochade_gui = False
                     GameOps.is_rochade = False
@@ -239,12 +239,14 @@ class GameBoard(tk.Frame):
         Arguments:
             event: left mouse click event on game board
         Returns:
-            field_idx: clicked game board field index
+            field_idx: clicked game board field index (row index, column index)
         """
         x = event.x - self.layout['board_x']
         y = event.y
         if (self.layout['board_w'] > x > 0) and (self.layout['board_h'] > y > 0):
-            field_idx = (abs(int(y / self.layout['field_w']) - 7), int(x / self.layout['field_w']))
+            row_idx = (self.n_rows - 1) - int(y / self.layout['field_w'])
+            col_idx = int(x / self.layout['field_w'])
+            field_idx = (row_idx, col_idx)
         else:
             field_idx = None
         return field_idx
@@ -271,7 +273,8 @@ class GameBoard(tk.Frame):
     def addpiece(self, name, image, field_idx):
         """Add a piece to the game board"""
         self.board.create_image(0, 0, image=image, tags=(name, 'piece'), anchor='c')
-        self.placepiece(name, (field_idx[0][0], field_idx[1][0]))
+        self.placepiece(name, (field_idx[0], field_idx[1]))
+        return
 
     @classmethod
     def addimages(cls, piece_images, piece_image_paths):
@@ -284,14 +287,15 @@ class GameBoard(tk.Frame):
         """Place a piece at the given row/column from field_idx
         Arguments:
              name: (str) the piece's 3 character short name
-             field_idx: (tuple) the (row, column) where to place the piece
+             field_idx: (tuple) the (row_idx, col_idx) where to place the piece
         """
-        row = abs(field_idx[0] - 7)
-        column = field_idx[1]
-        self.pieces[name] = (row, column)
-        x0 = self.layout['field_w'] * (0.5 + column) + self.layout['label_w']
-        y0 = self.layout['field_w'] * (0.5 + row)
+        row_idx = (self.n_rows - 1) - field_idx[0]
+        col_idx = field_idx[1]
+        self.pieces[name] = (row_idx, col_idx)
+        x0 = self.layout['board_x'] + self.layout['field_w'] * (0.5 + col_idx)
+        y0 = self.layout['board_y'] + self.layout['field_w'] * (0.5 + row_idx)
         self.board.coords(name, x0, y0)
+        return
 
     def loadStates(self, state_count):
         """loads a specific state of the current game
