@@ -152,6 +152,12 @@ class GameBoard(tk.Frame):
         self.panel.create_rectangle(rect_coords, tags='panel')
         return
 
+    # def flip_board(self):
+    #     self.row_chars = self.row_chars[::-1]
+    #     self.column_chars = self.column_chars[::-1]
+    #     self.draw_board(None)
+    #     return
+
     @staticmethod
     def get_game_layout(window_w, window_h, n_rows, n_cols, last_layout=None):
         """creates the dimensions for a GUI board game including field labels and a user interface panel:
@@ -201,7 +207,7 @@ class GameBoard(tk.Frame):
     def click_board(self, event):
         """This function controls the game board interaction
             1) the first click (click_idx==0) selects the chess piece
-            2) the second click will move the piece to the desired field (if move is valid)
+            2) the second click can choose a different piece or move the piece to the desired field (if move is valid)
             3) in case of an invalid move, the user will be informed
         """
         if GameOps.is_checkmate:
@@ -211,17 +217,17 @@ class GameBoard(tk.Frame):
             return
         self.layout['field_idx'] = field_idx
         piece = self.board_state[field_idx]
+        piece_color = piece.color if piece else 0
         field_name = self.field_names[field_idx]
-        if self.click_idx == 0:
-            if piece:
-                self.highlighter = self.create_highlighter(canvas=self.board, field_idx=self.layout['field_idx'])
-                # print('clicked on {} on field {}'.format(piece.name, field_idx))
-                self.piece_selected = piece
-                self.click_idx += 1
-            else:
-                self.piece_selected = None
-                print('no piece on field {}'.format(field_idx))
-        else:
+
+        if self.click_idx == 0:  # select piece
+            self.first_board_click(piece)
+        elif self.click_idx == 1 and (piece_color - 1 == GameOps.move_count % 2):  # select another piece
+            self.end_move()
+            self.remove_highlighter()
+            self.layout['field_idx'] = field_idx
+            self.first_board_click(piece)
+        else:  # do the move
             self.piece_selected.move(field_name)
             if self.valid_move:
                 if self.kill is not None:
@@ -237,10 +243,22 @@ class GameBoard(tk.Frame):
                 self.final_move = GameOps.move_count - 1
                 self.redo_move = self.final_move
                 GameOps.save_state()
-            self.end_move()
-            self.remove_highlighter()
-            self.update_bottons()
+                self.end_move()
+                self.remove_highlighter()
+                self.update_bottons()
+                # self.flip_board()
+            else:
+                pass
         return
+
+    def first_board_click(self, piece):
+        if piece:
+            self.highlighter = self.create_highlighter(canvas=self.board, field_idx=self.layout['field_idx'])
+            self.piece_selected = piece
+            self.click_idx += 1
+        else:
+            self.piece_selected = None
+            print('no piece on field {}'.format(field_idx))
 
     def end_move(self):
         self.click_idx = 0
@@ -346,13 +364,6 @@ class GameBoard(tk.Frame):
         return
 
     def update_bottons(self):
-        # if self.redo_move < self.final_move:
-        #     self.button_redo['state'] = tk.NORMAL
-        # else:
-        #     self.button_redo['state'] = tk.DISABLED
-        # #
-        # # if self.redo_move > 0:
-
         if self.redo_move == -1:
             self.button_undo['state'] = tk.DISABLED
         else:
@@ -363,7 +374,6 @@ class GameBoard(tk.Frame):
         else:
             self.button_redo['state'] = tk.NORMAL
         return
-
 
     @button_control
     def click_undo(self, event):
