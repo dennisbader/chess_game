@@ -2,7 +2,6 @@ import os
 import abc
 import numpy as np
 
-import tkinter as tk
 import _pickle as pickle
 
 
