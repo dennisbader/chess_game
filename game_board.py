@@ -4,6 +4,16 @@ import tkinter as tk
 from chess_core import GameOps
 
 
+def button_control(func):
+    def wrap(*args, **kwargs):
+        event = args[1]
+        if event.widget['state'] == 'disabled':
+            return
+        func(*args, **kwargs)
+        return
+    return wrap
+
+
 class GameBoard(tk.Frame):
     column_chars, row_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], ['1', '2', '3', '4', '5', '6', '7', '8']
     label_column, label_row = [], []
@@ -16,7 +26,7 @@ class GameBoard(tk.Frame):
         self.parent = parent
         self.board_state = board_state
         self._saved_states = 0
-        self.final_move = 0
+        self.final_move = -1
         self.redo_move = 0
         self.state_change = False
         self.n_rows = n_rows
@@ -54,6 +64,8 @@ class GameBoard(tk.Frame):
                                 width=self.layout['panel_w'] + self.layout['label_w'],
                                 height=self.layout['board_ext_h'],
                                 background='bisque')
+        self.button_undo = None
+        self.button_redo = None
         self.panel.pack(side=tk.RIGHT, fill=tk.Y, expand=tk.FALSE, padx=0, pady=0)
         self.panel.bind('<Configure>', self.draw_panel)
 
@@ -126,10 +138,10 @@ class GameBoard(tk.Frame):
         undo_y = 3 * pad
         redo_y = 9 * pad
 
-        self.make_button(
+        self.button_undo = self.make_button(
             button_name='UNDO', button_method=self.click_undo,
             canvas=self.panel, x=undo_x, y=undo_y, anchor='nw', tags='panel')
-        self.make_button(
+        self.button_redo = self.make_button(
             button_name='REDO', button_method=self.click_redo,
             canvas=self.panel, x=undo_x, y=redo_y, anchor='nw', tags='panel')
 
@@ -181,7 +193,7 @@ class GameBoard(tk.Frame):
         Returns:
             button: tkinter button widget
         """
-        button = tk.Button(canvas, text=button_name)
+        button = tk.Button(canvas, text=button_name, state=tk.DISABLED)
         canvas.create_window(x, y, window=button, tags=tags, anchor=anchor)
         button.bind('<Button-1>', button_method)
         return button
@@ -227,6 +239,7 @@ class GameBoard(tk.Frame):
                 GameOps.save_state()
             self.end_move()
             self.remove_highlighter()
+            self.update_bottons()
         return
 
     def end_move(self):
@@ -332,14 +345,38 @@ class GameBoard(tk.Frame):
             self.add_piece(p.short_name, self.piece_images[p.short_name], p.field_idx)
         return
 
+    def update_bottons(self):
+        # if self.redo_move < self.final_move:
+        #     self.button_redo['state'] = tk.NORMAL
+        # else:
+        #     self.button_redo['state'] = tk.DISABLED
+        # #
+        # # if self.redo_move > 0:
+
+        if self.redo_move == -1:
+            self.button_undo['state'] = tk.DISABLED
+        else:
+            self.button_undo['state'] = tk.NORMAL
+
+        if self.redo_move == self.final_move:
+            self.button_redo['state'] = tk.DISABLED
+        else:
+            self.button_redo['state'] = tk.NORMAL
+        return
+
+
+    @button_control
     def click_undo(self, event):
         """method for the UNDO button that loads the last game state"""
         state_count = self.redo_move - 1
         self.load_states(state_count)
+        self.update_bottons()
         return
 
+    @button_control
     def click_redo(self, event):
         """method for the REDO button that loads the next game state"""
         state_count = self.redo_move + 1
         self.load_states(state_count)
+        self.update_bottons()
         return
