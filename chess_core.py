@@ -270,16 +270,18 @@ class GameOps(metaclass=IterRegistry):
     def pawn2queen(self):
         color_text = 'White' if self.color == 1 else 'Black'
         short_name = 'Q_' + str(GameOps.queen_counter) + color_text[0]
-        queen_white_fin = self.board_gui.piece_image_paths['Q_W']
-        queen_black_fin = self.board_gui.piece_image_paths['Q_B']
+        queen_white_fin = self.board_gui.image_paths['Q_W']
+        queen_black_fin = self.board_gui.image_paths['Q_B']
         p = Queen('Queen ' + color_text, short_name, self.color, self.current_field,
                   queen_white_fin if self.color == 1 else queen_black_fin)
         self.board_objects[self.field_idx] = p
         self.kill_piece(self)
-        self.board_gui.piece_images[self.short_name] = ''
-        self.board_gui.piece_images[p.short_name] \
-            = tk.PhotoImage(file=queen_white_fin if self.color == 1 else queen_black_fin)
-        self.board_gui.add_piece(p.short_name, self.board_gui.piece_images[p.short_name], p.field_idx)
+        self.board_gui.images['pieces'][self.short_name] = ''
+        self.board_gui.images['pieces'][p.short_name] \
+            = self.board_gui.read_image(fin=queen_white_fin if self.color == 1 else queen_black_fin)
+        # self.board_gui.images['pieces'][p.short_name] \
+        #     = tk.PhotoImage(file=queen_white_fin if self.color == 1 else queen_black_fin)
+        self.board_gui.add_piece(p.short_name, self.board_gui.images['pieces'][p.short_name], p.field_idx)
         mate_board = self.board_objects.copy()
         return mate_board
 

@@ -1,9 +1,9 @@
 import os
 import numpy as np
 import pandas as pd
-import tkinter as tk
 
 from chess_core import Pawn, Rook, Knight, Bishop, Queen, King
+from game_board import GameBoard
 
 
 class ChessConfig:
@@ -40,7 +40,8 @@ class ChessConfig:
         piece_images = {}
         piece_image_paths = {}
         for piece in pieces:
-            piece_images[piece.short_name] = tk.PhotoImage(file=piece.img_file)
+            piece_images[piece.short_name] = GameBoard.read_image(fin=piece.img_file)
+            # piece_images[piece.short_name] = tk.PhotoImage(file=piece.img_file)
             piece_image_paths[piece.short_name[:3]] = piece.img_file
             board_gui.add_piece(piece.short_name, piece_images[piece.short_name], piece.field_idx)
         board_gui.add_images(piece_images, piece_image_paths)
