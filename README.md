@@ -19,8 +19,8 @@ For an easy conda environment installation you can find a .yml file at ./env_bui
 
 ## How to play
 
-* You can run the game by executing the `chess_game.py` script:
-> python your_path_to_chess_game/chess_game.py
+* You can run the game by executing the `start_game.py` script:
+> python your_path_to_chess_game/start_game.py
 
 * To move a piece: first click on the piece, then click on the field you want to move to.
 * Undo/redo move: you can always go back and forth between alreayed played moves by clicking the UNDO/REDO buttons
