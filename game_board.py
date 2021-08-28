@@ -21,8 +21,8 @@ def button_control(func):
 class GameBoard(tk.Frame):
     column_chars, row_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], ['1', '2', '3', '4', '5', '6', '7', '8']
     label_column, label_row = [], []
-    images = {'pieces': {}, 'buttons': {}}
-    widgets = {'buttons': {}}
+    images = {'pieces': {}, 'button': {}}
+    widgets = {'button': {}, 'text': {}}
     image_paths = {}
 
     def __init__(self, parent, board_state, root_dir, n_rows=8, n_cols=8, color1='#F0D9B5', color2='#B58863'):
@@ -76,9 +76,9 @@ class GameBoard(tk.Frame):
 
         # board flip switch button images
         self.save_image(fin=os.path.join(self.root_dir, 'images', 'buttons', 'on_off', 'on.png'),
-                        img_cat='buttons', img_name='flip_on', scale=0.4)
+                        img_cat='button', img_name='flip_on', scale=0.4)
         self.save_image(fin=os.path.join(self.root_dir, 'images', 'buttons', 'on_off', 'off.png'),
-                        img_cat='buttons', img_name='flip_off', scale=0.4)
+                        img_cat='button', img_name='flip_off', scale=0.4)
 
         self.panel.pack(side=tk.RIGHT, fill=tk.Y, expand=tk.FALSE, padx=0, pady=0)
         self.panel.bind('<Configure>', self.draw_panel)
@@ -158,27 +158,33 @@ class GameBoard(tk.Frame):
         # create new buttons at updated positions
         width = 50
         height = 25
-        x_pad, y_pad = 1, height * 1.25
+        x_pad, y_pad = 1, height + 3 * pad
 
         undo_x = 3 * pad
         undo_y = 3 * pad
-        redo_y = undo_y + y_pad
+        redo_y = undo_y + 1.25 * height
         flip_y = redo_y + y_pad
+        info_y = flip_y + y_pad
 
-        self.widgets['button_undo'] = self.make_button(
-            button_name='UNDO', button_method=self.click_undo,
-            canvas=self.panel, x=undo_x, y=undo_y, w=width, h=height,
-            anchor='nw', tags='panel', state=tk.DISABLED)
-        self.widgets['button_redo'] = self.make_button(
-            button_name='REDO', button_method=self.click_redo,
-            canvas=self.panel, x=undo_x, y=redo_y, w=width, h=height,
-            anchor='nw', tags='panel', state=tk.DISABLED)
-        self.widgets['button_flip'] = self.make_button(
-            button_name='FLIP', button_method=self.click_flip,
-            canvas=self.panel, x=undo_x, y=flip_y, w=width, h=height,
-            anchor='nw', tags='panel', state=tk.NORMAL,
-            image=self.images['buttons']['flip_off'])
-
+        half_width = 1 * (self.layout['panel_w'] - 2 * (undo_x))
+        if not self.widgets['button']:
+            self.widgets['button']['undo'] = self.make_button(
+                button_name='UNDO', button_method=self.click_undo,
+                canvas=self.panel, x=undo_x, y=undo_y, w=width, h=height,
+                anchor='nw', tags='panel', state=tk.DISABLED)
+            self.widgets['button']['redo'] = self.make_button(
+                button_name='REDO', button_method=self.click_redo,
+                canvas=self.panel, x=undo_x, y=redo_y, w=width, h=height,
+                anchor='nw', tags='panel', state=tk.DISABLED)
+            self.widgets['button']['flip'] = self.make_button(
+                button_name='FLIP', button_method=self.click_flip,
+                canvas=self.panel, x=undo_x, y=flip_y, w=width, h=height,
+                anchor='nw', tags='panel', state=tk.NORMAL,
+                image=self.images['button']['flip_off'])
+            self.widgets['text']['info'] = self.make_text(
+                canvas=self.panel, x=undo_x, y=info_y, h=5*height, w=half_width, anchor='nw')
+        else:
+            pass
         # create rectangle around panel border
         rect_coords = (
             pad, pad, self.layout['panel_w'] - 2 * pad, self.layout['board_ext_h'] - pad
@@ -249,10 +255,31 @@ class GameBoard(tk.Frame):
         Returns:
             button: tkinter button widget
         """
-        button = tk.Button(canvas, text=button_name, state=state, image=image, width=w, height=h)
-        button.place(x=x, y=y, width=w, height=h)
+        button = tk.Button(canvas, text=button_name, state=state, image=image)
+        button.place(x=x, y=y, width=w, height=h, anchor=anchor)
         button.bind('<Button-1>', button_method)
         return button
+
+    @staticmethod
+    def make_text(canvas, x, y, h=10, w=10, anchor='c'):
+        text_box = tk.Text(canvas)
+        text_box.place(x=x, y=y, width=w, height=h, anchor=anchor)
+        vsb = tk.Scrollbar(text_box, orient="vertical", command=text_box.yview)
+        vsb.pack(side="right", fill="y")
+        text_box.config(state=tk.DISABLED, yscrollcommand=vsb.set)
+        return text_box
+
+    @staticmethod
+    def output_text(*args, **kwargs):
+        GameOps.output_text(*args, **kwargs)
+
+    @staticmethod
+    def insert_text(text_box, text, style=None):
+        text_box.tag_config(style, foreground=style)
+        text_box.config(state=tk.NORMAL)
+        text_box.insert('end', text, style)
+        text_box.config(state=tk.DISABLED)
+        text_box.see('end')
 
     def click_board(self, event):
         """This function controls the game board interaction
@@ -320,7 +347,7 @@ class GameBoard(tk.Frame):
                 self.parent.update()
                 if self.board_flip:
                     self.flip_board()
-                    time.sleep(0.2)
+                    time.sleep(0.5)
             else:
                 pass
 
@@ -422,7 +449,6 @@ class GameBoard(tk.Frame):
             self._saved_states = GameOps.load_state()
         self.redo_move = state_count
         state = self._saved_states[self.redo_move].copy()
-        print('Loaded Move {}'.format('Initial' if state_count == -1 else state_count))
         GameOps.pieces = [p for p in state['pieces'] if p.is_alive]
         GameOps.move_count = state['globalVars']['move_count']
         GameOps.was_checked = state['globalVars']['was_checked']
@@ -441,29 +467,30 @@ class GameBoard(tk.Frame):
         for p in GameOps:
             self.images['pieces'][p.short_name] = tk.PhotoImage(file=p.img_file)
             self.add_piece(p.short_name, self.images['pieces'][p.short_name], p.field_idx)
+        self.output_text('Loaded Move {}'.format('Initial' if state_count == -1 else state_count), prefix='=>', style='load')
         return
 
     def update_bottons(self):
         if self.redo_move == -1:
-            self.widgets['button_undo']['state'] = tk.DISABLED
+            self.widgets['button']['undo']['state'] = tk.DISABLED
         else:
-            self.widgets['button_undo']['state'] = tk.NORMAL
+            self.widgets['button']['undo']['state'] = tk.NORMAL
 
         if self.redo_move == self.final_move:
-            self.widgets['button_redo']['state'] = tk.DISABLED
+            self.widgets['button']['redo']['state'] = tk.DISABLED
         else:
-            self.widgets['button_redo']['state'] = tk.NORMAL
+            self.widgets['button']['redo']['state'] = tk.NORMAL
         return
 
     def click_flip(self, event):
         move_count = GameOps.move_count
         if self.board_flip:
-            self.widgets['button_flip'].config(image=self.images['buttons']['flip_off'])
+            self.widgets['button']['flip'].config(image=self.images['button']['flip_off'])
             self.board_flip = False
             if bool(move_count % 2) and self.is_flipped:
                 self.flip_board()
         else:
-            self.widgets['button_flip'].config(image=self.images['buttons']['flip_on'])
+            self.widgets['button']['flip'].config(image=self.images['button']['flip_on'])
             self.board_flip = True
             if bool(move_count % 2) and not self.is_flipped:
                 self.flip_board()

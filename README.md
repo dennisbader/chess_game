@@ -12,8 +12,10 @@ Clone the repository to your local machine.
 Requirements (tested):
 * python=3.7
 * numpy=1.17.2
+* pandas=1.17.2
 * matplotlib=3.1.1
 * tk=8.6.8
+* pillow=5.3.0
 
 For an easy conda environment installation you can find a .yml file at ./env_builder/chess_gui_env.yml
 
