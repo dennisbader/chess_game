@@ -4,6 +4,8 @@ import numpy as np
 
 import _pickle as pickle
 
+from text_styles import TextStyle
+
 
 class IterRegistry(type):
     def __iter__(cls):
@@ -18,6 +20,9 @@ class GameOps(metaclass=IterRegistry):
     column_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
     row_chars = [str(i) for i in range(1, len(column_chars) + 1)]
     move_count = 0
+    verbose = True
+    board_gui = None
+    board_objects = None
     # saves if white/black were already in check (for rochade): idx 0 -> white, idx 1 -> black]
     was_checked = [False, False]
     is_rochade, is_rochade_gui = False, False
@@ -114,9 +119,29 @@ class GameOps(metaclass=IterRegistry):
         field_idx = np.where(self.field_names == target_field)
         return tuple([field_idx[0][0], field_idx[1][0]])
 
+    @classmethod
+    def output_text(cls, text, prefix=None, style='black'):
+        if not cls.verbose:
+            return
+
+        # text
+        text = '{} {}\n'.format(prefix if prefix is not None else str(cls.move_count) + '.', text)
+        text = text.lower()
+
+        # text style
+        launcher = 'gui' if cls.board_gui is not None else 'console'
+        style = TextStyle.styles[launcher][style]
+        style_end = TextStyle.styles[launcher]['end']
+
+        if cls.board_gui is not None:  # print in GUI
+            cls.board_gui.insert_text(cls.board_gui.widgets['text']['info'], text, style=style)
+        else:  # print in console
+            text = style + text + style_end
+            print(text)
+
     def description(self):
-        print('{}, {}'.format(self.name, 'white' if self.color == 1 else 'black'))
-        print('Current field: {}'.format(self.current_field))
+        self.output_text('{}, {}'.format(self.name, 'white' if self.color == 1 else 'black'))
+        self.output_text('Current field: {}'.format(self.current_field))
         return
 
     def valid_field(self, field_to_check, piece_color, board_objects, request_text=True):
@@ -131,7 +156,9 @@ class GameOps(metaclass=IterRegistry):
             field_color = board_objects[field_idx].color
             if piece_color == field_color:
                 if request_text:
-                    print('MoveError: {} contains piece of same color'.format(field_to_check))
+                    self.output_text(
+                        text='MoveError: {} contains piece of same color'.format(field_to_check),
+                        style='warning')
                 pass
             else:
                 field_isvalid = 2
@@ -178,7 +205,9 @@ class GameOps(metaclass=IterRegistry):
             valid_text = '{} kills {} on {}'.format(self.name, enemy_name ,intermediate_steps[-1])
             if 'Pawn' in self.name and len(intermediate_steps) > 1:
                 if request_text:
-                    print('MoveError: {} cannot move to {}'.format(self.name, intermediate_steps[-1]))
+                    self.output_text(
+                        text='MoveError: {} cannot move to {}'.format(self.name, intermediate_steps[-1]),
+                        prefix='--', style='warning')
                 return 0, valid_text
             self.board_gui.valid_move = True
             if request_text:
@@ -246,7 +275,9 @@ class GameOps(metaclass=IterRegistry):
 
     def check_mate(self, color, mate_checker=True):
         if self.is_check(color):
-            print('{} needs to move out of check'.format('White' if color == 1 else 'Black'))
+            self.output_text(
+                text='{} needs to move out of check'.format('White' if color == 1 else 'Black'),
+                prefix='--', style='warning')
             for piece in GameOps:
                 if piece.color == color and piece.is_alive:
                     for i, move_to in np.ndenumerate(self.field_names):
@@ -254,10 +285,14 @@ class GameOps(metaclass=IterRegistry):
                         checkmate = piece.execute_move(move_to, piece.possible_moves, mate_checker)
                         if not checkmate:
                             GameOps.was_checked[piece.color - 1] = True
-                            print('{} can escape check'.format('White' if color == 1 else 'Black'))
+                            self.output_text(
+                                text='{} can escape check'.format('White' if color == 1 else 'Black'),
+                                prefix='--', style='normal')
                             return
             GameOps.is_checkmate = True
-            print('{} is check mate. Congrats!'.format('White' if color == 1 else 'Black'))
+            self.output_text(
+                text='{} is check mate. Congrats!'.format('White' if color == 1 else 'Black'),
+                prefix='**', style='win')
         return
 
     def check_pawn2queen(self, promoter=False):
@@ -310,7 +345,7 @@ class GameOps(metaclass=IterRegistry):
                         self.board_gui.kill = None
                 else:
                     if mate_checker:
-                        print(valid_text)
+                        self.output_text(valid_text)
                         self.move_idx += 1
                         self.move_counter()
                         if GameOps.is_rochade:
@@ -331,26 +366,27 @@ class GameOps(metaclass=IterRegistry):
 
         if mate_checker:
             if info_text:
-                print(info_text)
+                self.output_text(info_text, prefix='--', style='warning')
             return
         else:
             return checkmate
 
     def move(self, move_to):
-        print('Move {}:'.format(self.move_count))
         move_to = move_to.upper()
+        text_warning = ''
         if not self.move_count % 2 == (self.color - 1):
-            print("TurnError: It is {}'s turn".format('white' if self.color == 2 else 'black'))
-            return
+            text_warning = "TurnError: It is {}'s turn".format('white' if self.color == 2 else 'black')
         if not self.is_alive:
-            print('PieceError: {} was already killed'.format(self.name))
-            return
+            text_warning = 'PieceError: {} was already killed'.format(self.name)
         if not np.array(np.where(self.field_names == move_to)).size:
-            print('FieldError: The Field does not exist! Try another value')
+            text_warning = 'FieldError: The Field does not exist! Try another value',
+
+        if text_warning:
+            self.output_text(text=text_warning, style='warning')
             return
+
         self.move_types(move_to)
         self.execute_move(move_to, self.possible_moves)
-        print('')
         return
 
     def piece_move_types(self, move_to):
