@@ -373,16 +373,17 @@ class GameOps(metaclass=IterRegistry):
 
     def move(self, move_to):
         move_to = move_to.upper()
-        text_warning = ''
-        if not self.move_count % 2 == (self.color - 1):
-            text_warning = "TurnError: It is {}'s turn".format('white' if self.color == 2 else 'black')
-        if not self.is_alive:
-            text_warning = 'PieceError: {} was already killed'.format(self.name)
-        if not np.array(np.where(self.field_names == move_to)).size:
-            text_warning = 'FieldError: The Field does not exist! Try another value',
 
-        if text_warning:
-            self.output_text(text=text_warning, style='warning')
+        warning = ''
+        if not self.move_count % 2 == (self.color - 1):
+            warning = "TurnError: It is {}'s turn".format('white' if self.color == 2 else 'black')
+        if not self.is_alive:
+            warning = 'PieceError: {} was already killed'.format(self.name)
+        if not np.array(np.where(self.field_names == move_to)).size:
+            warning = 'FieldError: The Field does not exist! Try another value',
+
+        if warning:
+            self.output_text(text=warning, style='warning')
             return
 
         self.move_types(move_to)
