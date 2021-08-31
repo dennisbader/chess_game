@@ -13,7 +13,9 @@ def button_control(func):
         event = args[1]
         if event.widget['state'] == 'disabled':
             return
-        func(*args, **kwargs)
+        gui = func(*args, **kwargs)
+        if gui.board_flip:
+            gui.flip_board()
         return
     return wrap
 
@@ -550,7 +552,7 @@ class GameBoard(tk.Frame):
         state_count = self.redo_move - 1
         self.load_states(state_count)
         self.update_bottons()
-        return
+        return self
 
     @button_control
     def click_redo(self, event):
@@ -559,4 +561,4 @@ class GameBoard(tk.Frame):
         state_count = self.redo_move + 1
         self.load_states(state_count)
         self.update_bottons()
-        return
+        return self
