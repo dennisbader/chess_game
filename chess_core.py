@@ -19,6 +19,7 @@ class GameOps(metaclass=IterRegistry):
     pieces = []
     column_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
     row_chars = [str(i) for i in range(1, len(column_chars) + 1)]
+    field_names = None
     move_count = 0
     verbose = True
     board_gui = None
@@ -32,6 +33,11 @@ class GameOps(metaclass=IterRegistry):
     queen_counter = 0
     is_checkmate = False
     save_file = os.path.join(os.path.dirname(__file__), 'saved_state.pkl')
+    codes = {
+        'invalid': 0,
+        'empty': 1,
+        'opponent': 2,
+    }
 
     def __init__(self, name, short_name, color, current_field, img_file):
         """Creates a chess piece object
@@ -51,10 +57,11 @@ class GameOps(metaclass=IterRegistry):
         self.checks = False
         self.promote = False  # promote pawn into another piece
 
-        self.field_names = self.get_field_names(row_chars=self.row_chars, column_chars=self.column_chars)
+        if GameOps.field_names is None:  # field names only have to be created once
+            GameOps.field_names = GameOps.get_field_names(row_chars=self.row_chars, column_chars=self.column_chars)
         self.current_field = current_field
         self.last_field = current_field
-        self.field_idx = self.get_field_idx(self.current_field)
+        self.field_idx = self.label2index(self.current_field)
         self.possible_moves = []
         self.receive_en_passant = False
         self.perform_en_passant = False
@@ -67,13 +74,30 @@ class GameOps(metaclass=IterRegistry):
         return np.array([['{}{}'.format(col, row) for col in column_chars] for row in row_chars])
 
     @classmethod
+    def index2label(cls, field_idx):
+        """converts a field index to field label (name)"""
+
+        return cls.field_names[field_idx]
+
+    @classmethod
+    def label2index(cls, label):
+        """converts a field label (name) to field index"""
+
+        field_idx = np.where(cls.field_names == label)
+        return tuple([field_idx[0][0], field_idx[1][0]])
+
+    @classmethod
     def initialize_game(cls, board_objects, board_gui):
+        """initializes the game by registering the board objects (pieces), the GUI board and initializing the save file
+        """
         cls.board_objects = board_objects
         cls.board_gui = board_gui
         cls.save_state(initializer=True)
 
     @classmethod
     def save_state(cls, initializer=False):
+        """saves the current game state"""
+
         move_count = -1 if initializer else cls.move_count - 1
         if os.path.exists(cls.save_file):
             saved_state = cls.load_state()
@@ -92,12 +116,16 @@ class GameOps(metaclass=IterRegistry):
 
     @classmethod
     def load_state(cls, move_counter=False):
+        """loads the game's save file"""
+
         with open(cls.save_file, 'rb') as f_in:
             _saved_state = pickle.load(f_in)
         return _saved_state
 
     @classmethod
     def get_global_vars(cls):
+        """gets the required game status values to save and retrieve specific moves"""
+
         global_vars = {
             'move_count': cls.move_count,
             'was_checked': cls.was_checked.copy(),
@@ -111,20 +139,14 @@ class GameOps(metaclass=IterRegistry):
         }
         return global_vars
 
-    @staticmethod
-    def move_counter():
-        GameOps.move_count += 1
-
-    def get_field_name(self, field_idx):
-        return self.field_names[field_idx]
-
-    def get_field_idx(self, target_field):
-        field_idx = np.where(self.field_names == target_field)
-        return tuple([field_idx[0][0], field_idx[1][0]])
-
     @classmethod
-    def output_text(cls, text, prefix=None, style='black'):
-        if not cls.verbose:
+    def output_text(cls, text, prefix=None, style='black', is_test=False):
+        """outputs gane info text (log) into one of the following:
+            -   GUI if game is played with the GUI
+            -   console if otherwise
+        """
+
+        if not cls.verbose or is_test:
             return
 
         # text
@@ -142,43 +164,23 @@ class GameOps(metaclass=IterRegistry):
             text = style + text + style_end
             print(text)
 
-    def description(self):
-        self.output_text('{}, {}'.format(self.name, 'white' if self.color == 1 else 'black'))
-        self.output_text('Current field: {}'.format(self.current_field))
+    def move_counter(self):
+        """increments the move count after valid move"""
+        self.move_idx += 1
+        GameOps.move_count += 1
+        if GameOps.is_rochade:
+            GameOps.rochade_rook.move_idx += 1
         return
-
-    def valid_field(self, field_to_check, piece_color, board_objects, is_test=False):
-        """
-        :return: field validity with values
-            0:  if not valid or field occupied by same color,
-            1:  if empty field,
-            2:  if field occupied by opposite color
-        """
-        field_idx = self.get_field_idx(field_to_check)
-        field_isvalid = 0
-        if isinstance(board_objects[field_idx], GameOps):  # field contains a piece
-            field_color = board_objects[field_idx].color
-            if piece_color == field_color:  # piece cannot move to field occupied by same color
-                if not is_test:
-                    self.output_text(
-                        text='MoveError: {} contains piece of same color'.format(field_to_check),
-                        style='warning')
-            else:
-                field_isvalid = 2  # piece kills opposite color
-        else:
-            if self.perform_en_passant:  # en passant has same functionality as killing
-                field_isvalid = 2
-            else:  # field is empty and valid
-                field_isvalid = 1
-        return field_isvalid
 
     def get_move_step(self, move_to):
         """returns a tuple of the move vector"""
-        move_to_idx = self.get_field_idx(move_to)
+
+        move_to_idx = self.label2index(move_to)
         return tuple([move_to_idx[i] - self.field_idx[i] for i in range(2)])
 
     def get_intermediate_field_names(self, move_to):
         """returns all intermediate steps that need to be valid to successfully execute the move"""
+
         field_idx = self.field_idx
         move_vector = list(self.get_move_step(move_to))
         step_count = max([abs(s) for s in move_vector])
@@ -186,157 +188,109 @@ class GameOps(metaclass=IterRegistry):
         intermediate_steps = []
         for s in range(step_count):  # identifies all intermediate field names
             field_idx = tuple([int(field_idx[i] + move_vector[i]/step_count) for i in range(2)])
-            intermediate_steps.append(self.get_field_name(field_idx))
+            intermediate_steps.append(self.index2label(field_idx))
 
         if 'Knight' in self.name:  # Knight jumps over
             intermediate_steps = [move_to]
         return intermediate_steps
 
-    def move_validity(self, move_to, color, is_test=False):
+    def invalid_request(self, move_to):
+        """checks if the move/piece selection request is valid"""
+
+        request_error = ''
+        if not self.move_count % 2 == (self.color - 1):
+            request_error = "TurnError: It is {}'s turn".format('white' if self.color == 2 else 'black')
+        if not self.is_alive:
+            request_error = 'PieceError: {} was already killed'.format(self.short_name)
+        if not np.array(np.where(self.field_names == move_to)).size:
+            request_error = 'FieldError: The Field does not exist! Try another value',
+        return request_error
+
+    def check_move(self, move_to, color, is_test=False):
         """
-            0:  at least one of the intermediate steps (or final step) is invalid
-            1:  move is valid
+            0:  -   move is not in piece's move set or
+                -   at least one of the intermediate steps or
+                -   final step is invalid
+            1:  move is valid to an empty field
             2:  move is valid and piece kills another piece
         """
-        valid_text = ''
-        valid_code = 0
-        intermediate_steps = self.get_intermediate_field_names(move_to)
 
-        for intermediate_step in intermediate_steps[:-1]:
-            if not self.valid_field(intermediate_step, color, self.board_objects, is_test) == 1:
-                valid_text = 'Intermediate step to {} is invalid'.format(intermediate_step)
-                return valid_code, valid_text
+        info_text = ''
+        end_code = self.codes['invalid']
 
-        final_step_isvalid = self.valid_field(intermediate_steps[-1], color, self.board_objects, is_test)
-        if final_step_isvalid == 0:  # invalid destination field or occupied by same color
-            valid_code = 0
-        elif final_step_isvalid == 1:  # empty field
-            valid_text = '{} moves to {}'.format(self.name, intermediate_steps[-1])
-            valid_code = 1
+        # check if move in move set
+        self.move_types(move_to, is_test=is_test)
+        step = list(self.get_move_step(move_to))
+        if step not in self.possible_moves:
+            info_text = 'MoveError: {} cannot move to {}'.format(self.short_name, move_to)
+            return end_code, info_text
+
+        # check if intermediate steps are valid
+        steps = self.get_intermediate_field_names(move_to)
+        for step in steps[:-1]:  # intermediate steps before end field
+            if not self.check_field(step, color, self.board_objects, is_test) == self.codes['empty']:
+                info_text = 'Intermediate step to {} is invalid'.format(step)
+                return end_code, info_text
+
+        # check the destination field
+        end_code = self.check_field(steps[-1], color, self.board_objects, is_test)
+        if end_code == self.codes['invalid']:  # invalid destination field or occupied by same color
+            pass
+        elif end_code == self.codes['empty']:  # empty field
+            info_text = '{} moves to {}'.format(self.short_name, steps[-1])
             self.board_gui.valid_move = True
-        elif final_step_isvalid == 2:  # field occupied by opposite color
+        elif end_code == self.codes['opponent']:  # field occupied by opposite color
             if self.perform_en_passant:  # en passant kill
                 enemy_idx = self.en_passant_idx
             else:  # normal kill
-                enemy_idx = self.get_field_idx(intermediate_steps[-1])
+                enemy_idx = self.label2index(steps[-1])
 
-            enemy_name = self.board_objects[enemy_idx].name
-            valid_text = '{} kills {} on {}'.format(self.name, enemy_name, intermediate_steps[-1])
-            valid_code = 2
+            enemy_short_name = self.board_objects[enemy_idx].short_name
+            info_text = '{} kills {} on {}'.format(self.short_name, enemy_short_name, steps[-1])
             self.board_gui.valid_move = True
             if not is_test:
                 self.board_gui.kill = self.board_objects[enemy_idx]
         else:  # unknown field validity code
-            raise ValueError('Unknown field validity: {}'.format(final_step_isvalid))
+            raise ValueError('Unknown field validity: {}'.format(end_code))
 
-        return valid_code, valid_text
+        return end_code, info_text
 
-    def resurrect_piece(self, enemy):
-        enemy.is_alive = True
-        enemy.current_field = self.current_field
-        enemy.field_idx = self.field_idx
-        return
+    def check_field(self, field_to_check, piece_color, board_objects, is_test=False):
+        """
+        :return: field validity with values
+            0:  if not valid or field occupied by same color,
+            1:  if empty field,
+            2:  if field occupied by opposite color
+        """
 
-    @staticmethod
-    def is_check(color):
-        check = False
-        for piece in GameOps:
-            if 'King' in piece.name and piece.color == color:
-                move_to = piece.current_field
-                break
-        is_test = True
-        for piece in GameOps:
-            if piece.color != color and piece.is_alive:
-                step = list(piece.get_move_step(move_to))
-                piece.piece_move_types(move_to, is_test=is_test)
-                if step in piece.possible_moves:
-                    move_isvalid, valid_text = piece.move_validity(move_to, piece.color, is_test)
-                    if move_isvalid:
-                        check = True
-                        break
-        return check
-
-    def move_piece(self, move_to, move_isvalid, in_rochade=False):
-        # empty the current field
-        if not in_rochade:
-            mate_board = self.board_objects.copy()
-
-        self.board_objects[self.field_idx] = None
-        # safe current field for possible redo_move
-        self.last_field = self.current_field
-        # move to requested field
-        self.current_field = move_to
-        self.field_idx = self.get_field_idx(move_to)
-
-        if move_isvalid == 2:  # piece kills
-            if self.perform_en_passant:
-                self.kill_piece(self.board_objects[self.en_passant_idx])
+        field_idx = self.label2index(field_to_check)
+        validity = self.codes['invalid']
+        if isinstance(board_objects[field_idx], GameOps):  # field contains a piece
+            field_color = board_objects[field_idx].color
+            if piece_color == field_color:  # piece cannot move to field occupied by same color
+                self.output_text(
+                    text='MoveError: {} contains piece of same color'.format(field_to_check),
+                    style='warning', is_test=is_test)
             else:
-                self.kill_piece(self.board_objects[self.field_idx])
-
-        self.board_objects[self.field_idx] = self
-        # kill piece on the field you want to move to
-        if not in_rochade:
-            return mate_board
+                validity = self.codes['opponent']  # piece kills opposite color
         else:
-            return
-
-    def kill_piece(self, enemy, replace=False):
-        if not replace:
-            self.board_objects[enemy.field_idx] = None
-        enemy.is_alive = False
-        enemy.current_field = 'Out of field'
-        enemy.field_idx = None
-        return
-
-    def redo_move(self, mate_board, move_isvalid):
-        if move_isvalid == 2:
-            self.resurrect_piece(mate_board[self.field_idx])
-        self.current_field = self.last_field
-        self.field_idx = self.get_field_idx(self.last_field)
-
-    def check_mate(self, color, mate_checker=True):
-        if self.is_check(color):
-            self.output_text(
-                text='{} needs to move out of check'.format('White' if color == 1 else 'Black'),
-                prefix='--', style='warning')
-            for piece in GameOps:
-                if piece.color == color and piece.is_alive:
-                    for i, move_to in np.ndenumerate(self.field_names):
-                        piece.move_types(move_to, mate_checker=mate_checker, is_test=True)
-                        checkmate = piece.execute_move(move_to, piece.possible_moves, mate_checker)
-                        if not checkmate:
-                            GameOps.was_checked[piece.color - 1] = True
-                            self.output_text(
-                                text='{} can escape check'.format('White' if color == 1 else 'Black'),
-                                prefix='--', style='normal')
-                            return
-            GameOps.is_checkmate = True
-            self.output_text(
-                text='{} is check mate. Congrats!'.format('White' if color == 1 else 'Black'),
-                prefix='**', style='win')
-        return
+            if self.perform_en_passant:  # en passant has same functionality as killing
+                validity = self.codes['opponent']
+            else:  # field is empty and valid
+                validity = self.codes['empty']
+        return validity
 
     def check_pawn2queen(self, promoter=False):
-        if 'Pawn' in self.name and any(row in self.current_field for row in ['1','8']):
+        """checks whether pawn can be promoted"""
+
+        if 'Pawn' in self.name and any(row in self.current_field for row in ['1', '8']):
             self.promote, promoter = True, True
             GameOps.queen_counter += 1
         return promoter
 
-    def check_en_passant(self):
-        pass
-
-    def pawn_en_passant(self):
-        pass
-
-    def reset_en_passant(self):
-        """resets the possibility to perform en passant on pawns after move was executed"""
-        for piece in GameOps.pieces:
-            if not piece == self:
-                piece.receive_en_passant = False
-        return
-
     def pawn2queen(self):
+        """promotes pawn to queen"""
+
         color_text = 'White' if self.color == 1 else 'Black'
         short_name = 'Q_' + str(GameOps.queen_counter) + color_text[0]
         queen_white_fin = self.board_gui.image_paths['Q_W']
@@ -348,112 +302,226 @@ class GameOps(metaclass=IterRegistry):
         self.board_gui.images['pieces'][self.short_name] = ''
         self.board_gui.images['pieces'][p.short_name] \
             = self.board_gui.read_image(fin=queen_white_fin if self.color == 1 else queen_black_fin)
-        # self.board_gui.images['pieces'][p.short_name] \
-        #     = tk.PhotoImage(file=queen_white_fin if self.color == 1 else queen_black_fin)
         self.board_gui.add_piece(p.short_name, self.board_gui.images['pieces'][p.short_name], p.field_idx)
         mate_board = self.board_objects.copy()
         return mate_board
 
-    def execute_move(self, move_to, possible_moves, mate_checker=True):
-        step = list(self.get_move_step(move_to))
-        checkmate = True
-        info_text = ''
-        is_test = True if not mate_checker else False
-        if step in possible_moves:  # move is in piece's move set
-            move_isvalid, valid_text = self.move_validity(move_to, self.color, is_test)
-            if move_isvalid:
-                mate_board = self.move_piece(move_to, move_isvalid)
-                if GameOps.is_rochade and mate_checker:
-                    GameOps.rochade_rook.move_piece(GameOps.rochade_rook_move_to, 1, in_rochade=True)
-                if self.is_check(self.color):
-                    self.redo_move(mate_board, move_isvalid)
-                    for index, x in np.ndenumerate(self.board_objects):
-                        self.board_objects[index] = mate_board[index]
-                        if self.board_objects[index]:
-                            self.board_objects[index].field_idx = index
-                            self.board_objects[index].current_field = self.field_names[index]
-                    info_text = 'CheckError: You would be in check position, try again!'
-                    GameOps.is_rochade_gui, GameOps.is_rochade = False, False
-                    if mate_checker:
-                        self.board_gui.valid_move = False
-                        self.board_gui.kill = None
-                else:
-                    if mate_checker:
-                        self.output_text(valid_text)
-                        self.move_idx += 1
-                        self.move_counter()
-                        if GameOps.is_rochade:
-                            GameOps.rochade_rook.move_idx += 1
-                        if self.check_pawn2queen():
-                            self.pawn2queen()
-                        opp_color = 2 if self.color == 1 else 1
-                        self.check_mate(opp_color, mate_checker=False)
-                    else:
-                        checkmate = False
-                        self.redo_move(mate_board, move_isvalid)
-                        for index, x in np.ndenumerate(self.board_objects):
-                            self.board_objects[index] = mate_board[index]
-            else:
-                pass
-        else:
-            info_text = 'MoveError: {} cannot move to {}'.format(self.name, move_to)
+    def kill_piece(self, enemy, replace=False):
+        """kills (removes) piece from board or replaces it (in case of pawn promotion)"""
 
-        if mate_checker:
-            if info_text:
-                self.output_text(info_text, prefix='--', style='warning')
-            return
-        else:
-            return checkmate
+        if not replace:
+            self.board_objects[enemy.field_idx] = None
+        enemy.is_alive = False
+        enemy.current_field = 'Out of field'
+        enemy.field_idx = None
+        return
+
+    def resurrect_piece(self, enemy):
+        """resurrects (adds) piece to board"""
+
+        enemy.is_alive = True
+        enemy.current_field = self.current_field
+        enemy.field_idx = self.field_idx
+        return
+
+    def redo_move(self, mate_board, move_validity, is_test=False):
+        """moves the piece back to previous position and status and resurrects killed pieces"""
+
+        if move_validity == self.codes['opponent']:
+            self.resurrect_piece(mate_board[self.field_idx])
+
+        self.current_field = self.last_field
+        self.field_idx = self.label2index(self.last_field)
+        for index, x in np.ndenumerate(self.board_objects):
+            self.board_objects[index] = mate_board[index]
+            if self.board_objects[index]:
+                self.board_objects[index].field_idx = index
+                self.board_objects[index].current_field = self.field_names[index]
+
+        GameOps.is_rochade_gui, GameOps.is_rochade = False, False
+        if not is_test:  # tell GUI that move is invalid only if it was an actual move (not a test)
+            self.board_gui.valid_move = False
+            self.board_gui.kill = None
+        return
+
+    def reset_en_passant(self):
+        """resets the possibility to perform en passant on pawns after move was executed"""
+
+        for piece in GameOps.pieces:
+            if not piece == self:
+                piece.receive_en_passant = False
+        return
 
     def move(self, move_to):
+        """governs the move"""
+
         move_to = move_to.upper()
 
-        warning = ''
-        if not self.move_count % 2 == (self.color - 1):
-            warning = "TurnError: It is {}'s turn".format('white' if self.color == 2 else 'black')
-        if not self.is_alive:
-            warning = 'PieceError: {} was already killed'.format(self.name)
-        if not np.array(np.where(self.field_names == move_to)).size:
-            warning = 'FieldError: The Field does not exist! Try another value',
+        is_test = False
 
-        if warning:
-            self.output_text(text=warning, style='warning')
+        request_error = self.invalid_request(move_to)
+        if request_error:
+            self.output_text(text=request_error, style='warning', is_test=is_test)
             return
 
-        self.move_types(move_to, is_test=False)
-        self.execute_move(move_to, self.possible_moves)
+        self.execute_move(move_to, is_test=is_test)
         self.reset_en_passant()
         return
 
-    def piece_move_types(self, move_to, is_test=False):
-        self.move_types(move_to, is_test=is_test)
+    def execute_move(self, move_to, is_test=False):
+        """executes the move by performing the following operations:
+            -   the first run of execute_move() is for the actually played move (is_test = False), the second run is to
+                    check for check and checkmate (is_test = True);
+                    escapes_check is only required in the test check_checkmate and check_check runs
+            1)  check whether move is valid
+            2)  perform move if valid
+            3)  if player would be in check after move then revert back and output warning
+            4)  -   if not in check and is_test == False then perform the move and check if opponent is checkmate
+                -   if not in check and is_test == True (we are in the second run of execute_move() and are checking
+                        for check and checkmate): all pieces go through their possible moves to see whether any move
+                        can prevent checkmate. if no move can prevent check than this condition is never met and player
+                        is checkmate
+        """
+
+        escapes_check = False
+        move_validity, info_text = self.check_move(move_to=move_to, color=self.color, is_test=is_test)
+        if move_validity == self.codes['invalid']:
+            self.output_text(info_text, prefix='--', style='warning', is_test=is_test)
+            return escapes_check
+
+        # move type is valid and executed, initial state is saved in case of reverting back
+        mate_board = self.move_piece(move_to=move_to, move_validity=move_validity, do_rochade=GameOps.is_rochade)
+
+        if self.check_check(self.color, is_test=is_test):  # move puts player into check -> revert back
+            self.redo_move(mate_board=mate_board, move_validity=move_validity, is_test=is_test)
+        else:  # move is valid and not in/escapes check
+            escapes_check = True
+            if is_test:
+                self.redo_move(mate_board=mate_board, move_validity=move_validity, is_test=is_test)
+            else:  # all tests passed for a valid move
+                self.move_counter()
+                self.output_text(info_text, is_test=is_test)
+                opponent_color = 2 if self.color == 1 else 1
+                self.check_checkmate(opponent_color)  # check if opponent is checkmate
+
+        return escapes_check
+
+    def move_piece(self, move_to, move_validity, do_rochade=False):
+        """performs the move with one of the following:
+            -   rochade
+            -   move to empty field
+            -   kill normal
+            -   kill en passant
+        """
+        mate_board = self.board_objects.copy()
+
+        self.board_objects[self.field_idx] = None  # empty the current field
+        self.last_field = self.current_field  # safe current field for possible redo_move
+        self.current_field = move_to  # move to requested field
+        self.field_idx = self.label2index(move_to)
+
+        if move_validity == self.codes['opponent']:  # piece kills
+            if self.perform_en_passant:  # with en passant
+                self.kill_piece(self.board_objects[self.en_passant_idx])
+            else:  # normal kill
+                self.kill_piece(self.board_objects[self.field_idx])
+
+        self.board_objects[self.field_idx] = self  # piece moves to field
+
+        if do_rochade:  # if rochade move the rook as well
+            GameOps.rochade_rook.move_piece(
+                move_to=GameOps.rochade_rook_move_to,
+                move_validity=self.codes['empty'],
+                do_rochade=False)
+
+        if self.check_pawn2queen():  # promote pawn
+            self.pawn2queen()
+
+        return mate_board
+
+    @classmethod
+    def check_check(cls, color, is_test=False):
+        """checks whether player is in check by checking if any of the opponent's piece attacks the king"""
+
+        is_check = False
+        for piece in GameOps:
+            if isinstance(piece, King) and piece.color == color:
+                move_to = piece.current_field  # find the King's position
+                break
+
+        for piece in GameOps:  # check if King is being attacked by any of opponent's pieces
+            if piece.color != color and piece.is_alive:
+                # go into test mode so that pieces are not actually moved
+                move_validity, info_text = piece.check_move(move_to=move_to, color=piece.color, is_test=True)
+                if not move_validity == cls.codes['invalid']:  # break if King is in check
+                    is_check = True
+                    break
+
+        if is_check:
+            cls.output_text(
+                text='{} in check'.format('White' if color == 1 else 'Black'),
+                prefix='--', style='warning', is_test=is_test)
+
+        return is_check
+
+    def check_checkmate(self, color):
+        """checks whether player is in checkmate by checking if player can move out of check"""
+
+        if not self.check_check(color, is_test=False):  # check if player in check; is_test = False to output text
+            return
+
+        is_test = True
+
+        for piece in GameOps:
+            if piece.color == color and piece.is_alive:
+                for i, move_to in np.ndenumerate(self.field_names):
+                    escapes_check = piece.execute_move(move_to, is_test=is_test)
+                    if escapes_check:
+                        GameOps.was_checked[piece.color - 1] = True
+                        self.output_text(
+                            text='{} can escape check'.format('White' if color == 1 else 'Black'),
+                            prefix='--', style='normal', is_test=False)
+                        return
+
+        # if none of the pieces can prevent from being in check, then checkmate
+        GameOps.is_checkmate = True
+        self.output_text(
+            text='{} is check mate. Congrats!'.format('White' if color == 1 else 'Black'),
+            prefix='**', style='win', is_test=False)
+
+        return
 
     @abc.abstractmethod
     def move_types(self, move_to, is_test=False):
         """defines the move set of a specific chess piece"""
+
         pass
 
     @staticmethod
     def is_diagonal(move_vector):
         """diagonal with same steps in vertical as horizontal direction"""
+
         move_v, move_h = move_vector
         return abs(move_v) == abs(move_h) and move_v != 0
 
     @staticmethod
     def is_straight(move_vector):
         """either vertical or horizontal direction"""
+
         move_v, move_h = move_vector
         return bool(move_v) != bool(move_h)
 
     @staticmethod
     def is_vertical(move_vector):
         """vertical direction"""
+
         move_v, move_h = move_vector
         return move_v != 0 and move_h == 0
 
     @staticmethod
     def is_horizontal(move_vector):
         """horizontal direction"""
+
         move_v, move_h = move_vector
         return move_v == 0 and move_h != 0
 
@@ -462,16 +530,18 @@ class Pawn(GameOps):
     """Pawn has different move sets depending on the current game situation:
         1) if Pawn has not moved yet: Pawn can move one or two steps vertically
         2) if Pawn has already moved: Pawn can move one step vertically
-        3) Pawn can onl kill in a one-step positive (relative to the black/white) diagonal direction
+        3) Pawn can onl kill in a one-step positive (relative to the black/white) diagonal direction or
+            through en passant
     """
+
     normal_moves = [[1, 0]]
     special_moves = [[2, 0]]
     kill_moves = [[1, -1], [1, 1]]
 
-    def move_types(self, move_to, mate_checker=True, is_test=False):
+    def move_types(self, move_to, is_test=False):
         if self.move_idx == 0:  # case 1)
             self.possible_moves = self.normal_moves + self.special_moves + self.kill_moves
-        else:  # case 2)
+        else:  # case 2) & 3)
             self.possible_moves = self.normal_moves + self.kill_moves
         if self.color == 2:  # black
             self.possible_moves = [[-i for i in m] for m in self.possible_moves]
@@ -479,11 +549,11 @@ class Pawn(GameOps):
         # exclude invalid moves
         kill_moves = self.possible_moves[-2:]
         move_vector = list(self.get_move_step(move_to))
-        move_to_idx = self.get_field_idx(move_to)
+        move_to_idx = self.label2index(move_to)
         move_valid = True
 
         self.perform_en_passant = False
-        if abs(move_vector[0]) == 2 and not is_test:
+        if abs(move_vector[0]) == 2 and not is_test:  # if pawn moves two in first move, it can receive en passant
             self.receive_en_passant = True
 
         if move_vector in kill_moves:
@@ -512,7 +582,7 @@ class Pawn(GameOps):
 class Rook(GameOps):
     """Rook can move either horizontally or vertically (straight)"""
 
-    def move_types(self, move_to, mate_checker=True, is_test=False):
+    def move_types(self, move_to, is_test=False):
         move_vector = list(self.get_move_step(move_to))
         if self.is_straight(move_vector):  # vertical-only or horizontal-only
             self.possible_moves = [move_vector]
@@ -527,7 +597,7 @@ class Knight(GameOps):
 
     normal_moves = [[2, -1], [2, 1], [1, 2], [-1, 2], [-2, -1], [-2, 1], [1, -2], [-1, -2]]
 
-    def move_types(self, move_to, mate_checker=True, is_test=False):
+    def move_types(self, move_to, is_test=False):
         self.possible_moves = self.normal_moves
         return
 
@@ -535,7 +605,7 @@ class Knight(GameOps):
 class Bishop(GameOps):
     """Bishop can move diagonally"""
 
-    def move_types(self, move_to, mate_checker=True, is_test=False):
+    def move_types(self, move_to, is_test=False):
         move_vector = list(self.get_move_step(move_to))
         if self.is_diagonal(move_vector):
             self.possible_moves = [move_vector]
@@ -545,7 +615,7 @@ class Bishop(GameOps):
 class Queen(GameOps):
     """Queen can move in any direction (diagonal, vertical, horizontal)"""
 
-    def move_types(self, move_to, mate_checker=True, is_test=False):
+    def move_types(self, move_to, is_test=False):
         move_vector = list(self.get_move_step(move_to))
         if self.is_diagonal(move_vector) or self.is_straight(move_vector):
             self.possible_moves = [move_vector]
@@ -561,21 +631,22 @@ class King(GameOps):
     normal_moves = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]
     rochade = [[0, -2], [0, 2]]
 
-    def move_types(self, move_to, mate_checker=True, is_test=False):
+    def move_types(self, move_to, is_test=False):
         self.possible_moves = self.normal_moves
         if self.move_idx == 0:
             move_vector = list(self.get_move_step(move_to))
-            is_rochade, rook_rochade = self.check_rochade(move_vector, mate_checker)
+            is_rochade, rook_rochade = self.check_rochade(move_vector, is_test=is_test)
             if is_rochade:
                 self.possible_moves = self.normal_moves + [move_vector]
                 self.set_rochade(move_vector, rook_rochade)
         return
 
-    def check_rochade(self, move_vector, mate_checker, is_test=False):
+    def check_rochade(self, move_vector, is_test=False):
         """checks whether the move is a valid rochade"""
+
         move_v, move_h = move_vector
         is_rochade, rook_rochade = False, None
-        if move_vector in self.rochade and not GameOps.was_checked[self.color - 1] and mate_checker:
+        if move_vector in self.rochade and not GameOps.was_checked[self.color - 1] and not is_test:
             rooks = [p for p in GameOps if 'Rook' in p.name and p.color == self.color and p.is_alive]
             for rook in rooks:
                 if (move_h > 0 and '2' in rook.name) or (move_h < 0 and '1' in rook.name) and rook.move_idx == 0:
@@ -584,11 +655,12 @@ class King(GameOps):
                     break
         return is_rochade, rook_rochade
 
-    def set_rochade(self, move_vector, rook_rochade, is_test=False):
+    def set_rochade(self, move_vector, rook_rochade):
         """sets all required settings for the rochade"""
+
         GameOps.is_rochade = True
         GameOps.is_rochade_gui = True
         GameOps.rochade_rook = rook_rochade
         rochade_idx = (self.field_idx[0], self.field_idx[1] + int(move_vector[1] / 2))
-        GameOps.rochade_rook_move_to = self.get_field_name(rochade_idx)
+        GameOps.rochade_rook_move_to = self.index2label(rochade_idx)
         return
