@@ -273,15 +273,14 @@ class GameOps(metaclass=IterRegistry):
             GameOps.queen_counter += 1
         return promoter
 
-    def move_piece(self, move_to, move_validity, in_rochade=False):
+    def move_piece(self, move_to, move_validity, do_rochade=False):
         """performs the move with one of the following:
             -   rochade
             -   move to empty field
             -   kill normal
             -   kill en passant
         """
-        if not in_rochade:
-            mate_board = self.board_objects.copy()
+        mate_board = self.board_objects.copy()
 
         self.board_objects[self.field_idx] = None  # empty the current field
         self.last_field = self.current_field  # safe current field for possible redo_move
@@ -296,10 +295,13 @@ class GameOps(metaclass=IterRegistry):
 
         self.board_objects[self.field_idx] = self  # piece moves to field
 
-        if not in_rochade:
-            return mate_board
-        else:
-            return
+        if do_rochade:  # if rochade move the rook as well
+            GameOps.rochade_rook.move_piece(
+                move_to=GameOps.rochade_rook_move_to,
+                move_validity=self.codes['empty'],
+                do_rochade=False)
+
+        return mate_board
 
     def kill_piece(self, enemy, replace=False):
         """kills (removes) piece from board or replaces it (in case of pawn promotion)"""
@@ -376,12 +378,8 @@ class GameOps(metaclass=IterRegistry):
             else:
                 return is_checkmate
 
-        mate_board = self.move_piece(move_to=move_to, move_validity=move_validity)
-        if GameOps.is_rochade and not is_test:
-            GameOps.rochade_rook.move_piece(
-                move_to=GameOps.rochade_rook_move_to,
-                move_validity=self.codes['empty'],
-                in_rochade=True)
+        mate_board = self.move_piece(move_to=move_to, move_validity=move_validity, do_rochade=GameOps.is_rochade)
+
         if self.check_check(self.color):
             self.redo_move(mate_board=mate_board, move_validity=move_validity)
             for index, x in np.ndenumerate(self.board_objects):
