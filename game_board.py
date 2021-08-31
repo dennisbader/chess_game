@@ -296,7 +296,6 @@ class GameBoard(tk.Frame):
         board_idx = self.label_to_board(field_name)
 
         self.layout['field_idx'] = field_idx
-        # self.layout['field_idx'] = board_idx
         piece = self.board_state[board_idx]
         piece_color = piece.color if piece else 0
         move_count = GameOps.move_count
@@ -317,7 +316,6 @@ class GameBoard(tk.Frame):
             self.click_idx += 1
         else:
             self.piece_selected = None
-            # print('no piece on field {}'.format(field_idx))
 
     def second_board_click(self, piece, field_idx, piece_color, field_name, move_count):
         if self.click_idx == 1 and self.check_color_move(piece_color, move_count):  # select another piece
