@@ -88,17 +88,53 @@ class GameBoard(tk.Frame):
         return
 
     def get_field_names(self):
-        return np.array([['{}{}'.format(i, j) for i in self.column_chars] for j in self.row_chars])
+        """creates an nd array with the board field names"""
+        return GameOps.get_field_names(row_chars=self.row_chars, column_chars=self.column_chars)
+
+    def coord_to_field(self, event):
+        """converts the event (click) coordinates to the corresponding game board field index
+        Arguments:
+            event: left mouse click event on game board
+        Returns:
+            field_idx: clicked game board field index (row index, column index)
+        """
+
+        x = event.x - self.layout['board_x']
+        y = event.y
+        if (self.layout['board_w'] > x > 0) and (self.layout['board_h'] > y > 0):
+            row_idx = (self.n_rows - 1) - int(y / self.layout['field_w'])
+            col_idx = int(x / self.layout['field_w'])
+            field_idx = (row_idx, col_idx)
+        else:
+            field_idx = None
+        return field_idx
+
+    def index2label(self, field_idx):
+        """converts a field index (of flippable GUI board) to field label (name)"""
+
+        return self.field_names[field_idx]
+
+    def label2index_gui(self, label):
+        """converts a field label (name) to field index (of flippable GUI board)"""
+
+        return tuple(np.argwhere(self.field_names == label)[0])
+
+    @staticmethod
+    def label2index_game(label):
+        """converts a field label (name) to field index (of non-flippable chess_core.GameOps board)"""
+
+        return GameOps.label2index(label=label)
 
     def refresh(self, event):
-        """updates the layout values whenever the window size changes"""
+        """updates the layout values whenever the window size is changed"""
+
         self.layout = self.get_game_layout(
             window_w=self.mainWindow.winfo_width(), window_h=self.mainWindow.winfo_height(), n_rows=self.n_rows,
             n_cols=self.n_cols, last_layout=self.layout)
         return
 
     def draw_board(self, event):
-        """Draw/update the game board with layout dimensions of the current window size"""
+        """Draw the game board and update layout dimensions with the current window size"""
 
         self.board.delete('square')
         self.board.delete('labels')
@@ -135,7 +171,7 @@ class GameBoard(tk.Frame):
         # place all pieces
         for piece in GameOps.pieces:
             if piece.is_alive:
-                self.place_piece(piece.short_name, self.label_to_field(piece.current_field))
+                self.place_piece(piece.short_name, self.label2index_gui(piece.current_field))
 
         self.board.tag_raise('piece')
         self.board.tag_lower('square')
@@ -146,7 +182,8 @@ class GameBoard(tk.Frame):
         return
 
     def draw_panel(self, event):
-        """Draw/update the panel with layout dimensions of the current window size"""
+        """Draw the panel with widgets and update layout dimensions with the current window size"""
+
         # delete all buttons in case of resized window
         self.panel.delete('panel')
 
@@ -194,6 +231,8 @@ class GameBoard(tk.Frame):
 
     @staticmethod
     def read_image(fin, resize=None, scale=None):
+        """reads and image file and converts it into a tkinter PhotoImage"""
+
         img = Image.open(fin)
         if resize is not None and scale is None:
             img = img.resize(resize, Image.ANTIALIAS)
@@ -205,12 +244,14 @@ class GameBoard(tk.Frame):
         self.images[img_cat][img_name] = self.read_image(fin, resize, scale)
 
     def flip_board(self):
-        field_label = self.field_to_label(self.layout['field_idx'])
+        """flips the GUI board so that each player can play its point of view"""
+
+        field_label = self.index2label(self.layout['field_idx'])
         self.row_chars = self.row_chars[::-1]
         self.column_chars = self.column_chars[::-1]
         self.field_names = self.get_field_names()
         if self.highlighter is not None:
-            self.layout['field_idx'] = self.label_to_field(field_label)
+            self.layout['field_idx'] = self.label2index_gui(field_label)
         self.draw_board(None)
         self.is_flipped = True if not self.is_flipped else False
 
@@ -225,6 +266,7 @@ class GameBoard(tk.Frame):
         Returns:
             layout: (dict) a dict containing all relevant variable for the layout
         """
+
         layout = {}
         window_square_length = min(window_w, window_h)
         field_w = int(window_square_length / (n_cols + 0.5))
@@ -245,7 +287,7 @@ class GameBoard(tk.Frame):
 
     @staticmethod
     def make_button(button_name, button_method, canvas, x, y, h=10, w=10, anchor='c', tags='', state=tk.NORMAL, image=None):
-        """creates a button with a name and method
+        """creates a tkinter button widget with a name and method
         Arguments:
             button_name: (str) the name of the button
             button_method: (method) the method to execute upon button click
@@ -255,6 +297,7 @@ class GameBoard(tk.Frame):
         Returns:
             button: tkinter button widget
         """
+
         button = tk.Button(canvas, text=button_name, state=state, image=image)
         button.place(x=x, y=y, width=w, height=h, anchor=anchor)
         button.bind('<Button-1>', button_method)
@@ -262,6 +305,8 @@ class GameBoard(tk.Frame):
 
     @staticmethod
     def make_text(canvas, x, y, h=10, w=10, anchor='c'):
+        """creates a text box tkinter widget"""
+
         text_box = tk.Text(canvas)
         text_box.place(x=x, y=y, width=w, height=h, anchor=anchor)
         vsb = tk.Scrollbar(text_box, orient="vertical", command=text_box.yview)
@@ -271,10 +316,14 @@ class GameBoard(tk.Frame):
 
     @staticmethod
     def output_text(*args, **kwargs):
+        """redirects the text output method to the chess_core.GameOps class"""
+
         GameOps.output_text(*args, **kwargs)
 
     @staticmethod
     def insert_text(text_box, text, style=None):
+        """inserts text into a text_box tkinter text widget"""
+
         text_box.tag_config(style, foreground=style)
         text_box.config(state=tk.NORMAL)
         text_box.insert('end', text, style)
@@ -287,13 +336,14 @@ class GameBoard(tk.Frame):
             2) the second click can choose a different piece or move the piece to the desired field (if move is valid)
             3) in case of an invalid move, the user will be informed
         """
+
         if GameOps.is_checkmate:
             return
         field_idx = self.coord_to_field(event)
         if field_idx is None:
             return
-        field_name = self.field_to_label(field_idx)
-        board_idx = self.label_to_board(field_name)
+        field_name = self.index2label(field_idx)
+        board_idx = self.label2index_game(field_name)
 
         self.layout['field_idx'] = field_idx
         piece = self.board_state[board_idx]
@@ -307,6 +357,11 @@ class GameBoard(tk.Frame):
         return
 
     def first_board_click(self, piece, piece_color, move_count):
+        """governs the first board click by one of the following operations:
+            -   select a piece if field contains a piece of the player's color
+            -   do nothing if field is empty or contains opponent's piece
+        """
+
         if piece:
             if not self.check_color_move(piece_color, move_count):
                 return
@@ -318,6 +373,12 @@ class GameBoard(tk.Frame):
             self.piece_selected = None
 
     def second_board_click(self, piece, field_idx, piece_color, field_name, move_count):
+        """governs the second board click by one of the following operations:
+            -   select another piece
+            -   perform a piece move if valid move
+            -   do nothing if invalid move and output a warning
+        """
+
         if self.click_idx == 1 and self.check_color_move(piece_color, move_count):  # select another piece
             self.end_move()
             self.remove_highlighter()
@@ -351,46 +412,27 @@ class GameBoard(tk.Frame):
 
     @staticmethod
     def check_color_move(color, move_count):
+        """checks whether a piece color is of equal color or opponent's color"""
+
         if color - 1 == move_count % 2:
             return True
         else:
             return False
 
     def end_move(self):
+        """ends a move by resetting the click count"""
+
         self.click_idx = 0
         return
 
-    def coord_to_field(self, event):
-        """converts the event coordinates to the corresponding game board field index
-        Arguments:
-            event: left mouse click event on game board
-        Returns:
-            field_idx: clicked game board field index (row index, column index)
-        """
-        x = event.x - self.layout['board_x']
-        y = event.y
-        if (self.layout['board_w'] > x > 0) and (self.layout['board_h'] > y > 0):
-            row_idx = (self.n_rows - 1) - int(y / self.layout['field_w'])
-            col_idx = int(x / self.layout['field_w'])
-            field_idx = (row_idx, col_idx)
-        else:
-            field_idx = None
-        return field_idx
-
-    def field_to_label(self, field_idx):
-        return self.field_names[field_idx]
-
-    def label_to_field(self, label):
-        return tuple(np.argwhere(self.field_names == label)[0])
-
-    def label_to_board(self, label):
-        return tuple(np.argwhere(self.board_labels == label)[0])
-
     def create_highlighter(self, canvas, field_idx):
         """creates a highlighter for the currently selected piece"""
+
         return canvas.create_rectangle(self.rectangle_field_coords(field_idx), width=4, tags='square')
 
     def remove_highlighter(self):
+        """removes the piece selection highlighter from GUI board"""
+
         self.board.delete(self.highlighter)
         self.highlighter = None
         self.layout['field_idx'] = (None, None)
@@ -398,6 +440,7 @@ class GameBoard(tk.Frame):
 
     def rectangle_field_coords(self, field_idx):
         """gives the rectangle coordinates for a field at field_idx on the game board"""
+
         row, col = field_idx
         x_0 = self.layout['board_x'] + col * self.layout['field_w']
         y_0 = (self.n_rows - row) * self.layout['field_w']
@@ -407,6 +450,7 @@ class GameBoard(tk.Frame):
 
     def add_piece(self, name, image, field_idx):
         """Add a piece to the game board"""
+
         self.board.create_image(0, 0, image=image, tags=(name, 'piece'), anchor='c')
         self.place_piece(name, (field_idx[0], field_idx[1]))
         return
@@ -414,6 +458,7 @@ class GameBoard(tk.Frame):
     @classmethod
     def add_images(cls, piece_images, piece_image_paths):
         """Save images and paths"""
+
         cls.images['pieces'] = piece_images
         cls.image_paths = piece_image_paths
         return
@@ -424,9 +469,9 @@ class GameBoard(tk.Frame):
              name: (str) the piece's 3 character short name
              field_idx: (tuple) the (row_idx, col_idx) where to place the piece
         """
+
         row_idx = (self.n_rows - 1) - field_idx[0]
         col_idx = field_idx[1]
-        # self.pieces[name] = (row_idx, col_idx)
         x0 = self.layout['board_x'] + self.layout['field_w'] * (0.5 + col_idx)
         y0 = self.layout['board_y'] + self.layout['field_w'] * (0.5 + row_idx)
         self.board.coords(name, x0, y0)
@@ -437,6 +482,7 @@ class GameBoard(tk.Frame):
         Arguments:
             state_count: (int) the index for the specific game state to load
         """
+
         self.end_move()
         self.remove_highlighter()
         if not self.final_move >= state_count >= -1:
@@ -469,6 +515,8 @@ class GameBoard(tk.Frame):
         return
 
     def update_bottons(self):
+        """controls how the UNDO/REDO buttons are displayed"""
+
         if self.redo_move == -1:
             self.widgets['button']['undo']['state'] = tk.DISABLED
         else:
@@ -481,6 +529,8 @@ class GameBoard(tk.Frame):
         return
 
     def click_flip(self, event):
+        """method for the flip board button that flips the board"""
+
         move_count = GameOps.move_count
         if self.board_flip:
             self.widgets['button']['flip'].config(image=self.images['button']['flip_off'])
@@ -496,6 +546,7 @@ class GameBoard(tk.Frame):
     @button_control
     def click_undo(self, event):
         """method for the UNDO button that loads the last game state"""
+
         state_count = self.redo_move - 1
         self.load_states(state_count)
         self.update_bottons()
@@ -504,6 +555,7 @@ class GameBoard(tk.Frame):
     @button_control
     def click_redo(self, event):
         """method for the REDO button that loads the next game state"""
+
         state_count = self.redo_move + 1
         self.load_states(state_count)
         self.update_bottons()
