@@ -16,7 +16,7 @@ board_objects = ChessConfig.initialize_board(GameOps.pieces)
 
 root = tk.Tk()
 board_gui = GameBoard(root, board_objects, root_dir)
-GameOps.initialize_game(board_objects=board_objects, board_gui=board_gui)
+GameOps.initialize_game(board_objects=board_objects, board_gui=board_gui, show_warnings=False)
 GameOps.verbose = True
 ChessConfig.fill_board(pieces=GameOps.pieces, board_gui=board_gui)
 root.mainloop()
