@@ -204,6 +204,8 @@ class GameBoard(tk.Frame):
         redo_y = undo_y + 1.25 * height
         flip_y = redo_y + y_pad
         info_y = flip_y + y_pad
+        warning_x = self.layout['panel_w'] - 3 * pad
+        warning_y = flip_y
 
         half_width = 1 * (self.layout['panel_w'] - 2 * (undo_x))
         if not self.widgets['button']:
@@ -220,6 +222,10 @@ class GameBoard(tk.Frame):
                 canvas=self.panel, x=undo_x, y=flip_y, w=width, h=height,
                 anchor='nw', tags='panel', state=tk.NORMAL,
                 image=self.images['button']['flip_off'])
+            self.widgets['button']['warnings'] = self.make_button(
+                button_name='WARNINGS', button_method=self.click_warning,
+                canvas=self.panel, x=warning_x, y=warning_y, w=2 * width, h=height,
+                anchor='ne', tags='panel', state=tk.NORMAL)
             self.widgets['text']['info'] = self.make_text(
                 canvas=self.panel, x=undo_x, y=info_y, h=5*height, w=half_width, anchor='nw')
         else:
@@ -562,3 +568,11 @@ class GameBoard(tk.Frame):
         self.load_states(state_count)
         self.update_bottons()
         return self
+
+    def click_warning(self, event):
+        GameOps.show_warnings = True if not GameOps.show_warnings else False
+        widget = self.widgets['button']['warnings']
+        widget.configure(state=tk.DISABLED if GameOps.show_warnings else tk.NORMAL)
+        widget.configure(fg='black' if not GameOps.show_warnings else 'gray')
+        return
+

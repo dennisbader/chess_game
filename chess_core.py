@@ -24,6 +24,7 @@ class GameOps(metaclass=IterRegistry):
     verbose = True
     board_gui = None
     board_objects = None
+    show_warnings = False
     # saves if white/black were already in check (for rochade): idx 0 -> white, idx 1 -> black]
     was_checked = [False, False]
     is_rochade, is_rochade_gui = False, False
@@ -87,12 +88,13 @@ class GameOps(metaclass=IterRegistry):
         return tuple([field_idx[0][0], field_idx[1][0]])
 
     @classmethod
-    def initialize_game(cls, board_objects, board_gui):
+    def initialize_game(cls, board_objects, board_gui, show_warnings):
         """initializes the game by registering the board objects (pieces), the GUI board and initializing the save file
         """
         cls.board_objects = board_objects
         cls.board_gui = board_gui
         cls.save_state(initializer=True)
+        cls.print_warning = show_warnings
 
     @classmethod
     def save_state(cls, initializer=False):
@@ -146,7 +148,7 @@ class GameOps(metaclass=IterRegistry):
             -   console if otherwise
         """
 
-        if not cls.verbose or is_test:
+        if not cls.verbose or is_test or (style == 'warning' and not cls.show_warnings):
             return
 
         # text
@@ -211,6 +213,7 @@ class GameOps(metaclass=IterRegistry):
             0:  -   move is not in piece's move set or
                 -   at least one of the intermediate steps or
                 -   final step is invalid
+                -   rochade moves through check
             1:  move is valid to an empty field
             2:  move is valid and piece kills another piece
         """
@@ -230,6 +233,12 @@ class GameOps(metaclass=IterRegistry):
         for step in steps[:-1]:  # intermediate steps before end field
             if not self.check_field(step, color, self.board_objects, is_test) == self.codes['empty']:
                 info_text = 'Intermediate step to {} is invalid'.format(step)
+                return end_code, info_text
+
+        # check if rochade moves through check
+        if GameOps.is_rochade:
+            end_code, info_text = self.check_through_check(steps[:-1])
+            if end_code == self.codes['invalid']:
                 return end_code, info_text
 
         # check the destination field
@@ -280,6 +289,24 @@ class GameOps(metaclass=IterRegistry):
                 validity = self.codes['empty']
         return validity
 
+    def check_through_check(self, steps):
+        """check whether king moves through check (i.e. during rochade)"""
+
+        end_code, info_text = self.codes['empty'], ''
+        for step in steps:
+            GameOps.is_rochade, GameOps.is_rochade_gui = False, False
+            mate_board = self.move_piece(move_to=step, move_validity=self.codes['empty'], do_rochade=False)
+            is_check = self.check_check(color=self.color)
+            self.redo_move(mate_board, move_validity=self.codes['empty'], is_test=False, reset_rochade=is_check)
+
+            if is_check:
+                end_code = self.codes['invalid']
+                info_text = 'Rochade through check'
+                return end_code, info_text
+            else:
+                GameOps.is_rochade_gui, GameOps.is_rochade = True, True
+        return end_code, info_text
+
     def check_pawn2queen(self, promoter=False):
         """checks whether pawn can be promoted"""
 
@@ -324,7 +351,7 @@ class GameOps(metaclass=IterRegistry):
         enemy.field_idx = self.field_idx
         return
 
-    def redo_move(self, mate_board, move_validity, is_test=False):
+    def redo_move(self, mate_board, move_validity, is_test=False, reset_rochade=True):
         """moves the piece back to previous position and status and resurrects killed pieces"""
 
         if move_validity == self.codes['opponent']:
@@ -337,8 +364,8 @@ class GameOps(metaclass=IterRegistry):
             if self.board_objects[index]:
                 self.board_objects[index].field_idx = index
                 self.board_objects[index].current_field = self.field_names[index]
-
-        GameOps.is_rochade_gui, GameOps.is_rochade = False, False
+        if reset_rochade:
+            GameOps.is_rochade_gui, GameOps.is_rochade = False, False
         if not is_test:  # tell GUI that move is invalid only if it was an actual move (not a test)
             self.board_gui.valid_move = False
             self.board_gui.kill = None
@@ -368,7 +395,7 @@ class GameOps(metaclass=IterRegistry):
         self.reset_en_passant()
         return
 
-    def execute_move(self, move_to, is_test=False):
+    def execute_move(self, move_to, is_test=False, bypass_validity=False):
         """executes the move by performing the following operations:
             -   the first run of execute_move() is for the actually played move (is_test = False), the second run is to
                     check for check and checkmate (is_test = True);
@@ -384,10 +411,12 @@ class GameOps(metaclass=IterRegistry):
         """
 
         escapes_check = False
+
         move_validity, info_text = self.check_move(move_to=move_to, color=self.color, is_test=is_test)
         if move_validity == self.codes['invalid']:
             self.output_text(info_text, prefix='--', style='warning', is_test=is_test)
             return escapes_check
+
 
         # move type is valid and executed, initial state is saved in case of reverting back
         mate_board = self.move_piece(move_to=move_to, move_validity=move_validity, do_rochade=GameOps.is_rochade)
