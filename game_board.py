@@ -61,7 +61,7 @@ class GameBoard(tk.Frame):
         self.mainWindow.bind('<Configure>', self.refresh)
 
         # create board canvas
-        self.board = tk.Canvas(self, borderwidth=0, highlightthickness=2,
+        self.board = tk.Canvas(self, borderwidth=0, highlightthickness=2, highlightbackground='black',
                                 width=self.layout['board_ext_w'],
                                 height=self.layout['board_ext_h'],
                                 background='bisque')
@@ -71,7 +71,7 @@ class GameBoard(tk.Frame):
         self.highlighter = None  # the highlighter for game piece selection
 
         # create panel canvas (for additional widgets)
-        self.panel = tk.Canvas(self, borderwidth=0, highlightthickness=2,
+        self.panel = tk.Canvas(self, borderwidth=0, highlightthickness=2, highlightbackground='black',
                                 width=self.layout['panel_w'] + self.layout['label_w'],
                                 height=self.layout['board_ext_h'],
                                 background='bisque')
@@ -230,11 +230,11 @@ class GameBoard(tk.Frame):
                 canvas=self.panel, x=undo_x, y=info_y, h=5*height, w=half_width, anchor='nw')
         else:
             pass
-        # create rectangle around panel border
-        rect_coords = (
-            pad, pad, self.layout['panel_w'] - 2 * pad, self.layout['board_ext_h'] - pad
-        )
-        self.panel.create_rectangle(rect_coords, tags='panel')
+        # # create rectangle around panel border
+        # rect_coords = (
+        #     pad, pad, self.layout['panel_w'] - 2 * pad, self.layout['board_ext_h'] - pad
+        # )
+        # self.panel.create_rectangle(rect_coords, tags='panel')
         return
 
     @staticmethod
@@ -286,7 +286,7 @@ class GameBoard(tk.Frame):
         layout['board_w'] = int(n_cols * layout['field_w'])
         layout['board_h'] = layout['board_w']
         layout['board_ext_h'] = int(window_square_length)
-        layout['board_ext_w'] = int(layout['board_w'] + layout['label_w'])
+        layout['board_ext_w'] = int(layout['board_w'] + layout['label_w'] + 0.5 * layout['label_w'])
         layout['panel_x'] = int(layout['board_ext_w'])
         layout['panel_w'] = int(window_w - layout['panel_x'])
         layout['total_w'] = int(layout['panel_x'] + layout['panel_w'])
