@@ -1,6 +1,7 @@
 import os
 import abc
 import numpy as np
+import pandas as pd
 
 import _pickle as pickle
 
@@ -18,9 +19,11 @@ class GameOps(metaclass=IterRegistry):
 
     pieces = []
     column_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+    colors = {'num': [1, 2], 'str': ['white', 'black'], 'str_short': ['w', 'b']}
     row_chars = [str(i) for i in range(1, len(column_chars) + 1)]
     field_names = None
     move_count = 0
+    current_color = {'num': 1, 'str': 'white', 'str_short': 'w'}
     verbose = True
     board_gui = None
     board_objects = None
@@ -31,7 +34,8 @@ class GameOps(metaclass=IterRegistry):
     rochade_rook = None
     rochade_rook_move_to = None
     rochade_field_idx = None
-    queen_counter = 0
+    promotion_counter = {p: p_count for p, p_count in zip(['Queen', 'Rook', 'Knight', 'Bishop'], [0, 2, 2, 2])}
+    promote_piece = None
     is_checkmate = False
     save_file = os.path.join(os.path.dirname(__file__), 'saved_state.pkl')
     codes = {
@@ -49,6 +53,7 @@ class GameOps(metaclass=IterRegistry):
             current_field: piece's start field
             img_file: path to the piece's image
         """
+
         self.pieces.append(self)
         self.name = name
         self.short_name = short_name
@@ -56,7 +61,6 @@ class GameOps(metaclass=IterRegistry):
         self.img_file = img_file
         self.is_alive = True
         self.checks = False
-        self.promote = False  # promote pawn into another piece
 
         if GameOps.field_names is None:  # field names only have to be created once
             GameOps.field_names = GameOps.get_field_names(row_chars=self.row_chars, column_chars=self.column_chars)
@@ -96,6 +100,41 @@ class GameOps(metaclass=IterRegistry):
         cls.save_state(initializer=True)
         cls.print_warning = show_warnings
 
+    @staticmethod
+    def initialize_board(pieces):
+        """fills a board matrix with game piece objects"""
+
+        board_frame = np.empty((8, 8), dtype=object)
+        for piece in pieces:
+            board_frame[piece.field_idx] = piece
+        return board_frame
+
+    @staticmethod
+    def fill_board(pieces, board_gui):
+        """routes the fill_board() method to the GUI"""
+
+        return board_gui.fill_board(pieces)
+
+    @staticmethod
+    def instantiate_pieces(piece_specs_fin, img_path):
+        """instantiates all game pieces specified in file './piece_specs.csv' """
+
+        piece_specs = pd.read_csv(piece_specs_fin)
+        for idx, piece in piece_specs.iterrows():
+            piece['img_file'] = os.path.join(img_path, piece['img_file'])
+            piece_type = piece['name_long'].split()[0]
+            GameOps.obj_from_string(class_name=piece_type, params=piece.to_list())
+        return
+
+    @staticmethod
+    def obj_from_string(class_name, params, module=None):
+        """instantiates an obj of class 'class' from module 'module'."""
+
+        if module is None:  # class is in current file
+            return globals()[class_name](*params)
+        else:  # class from another module
+            return getattr(module, class_name)(*params)
+
     @classmethod
     def save_state(cls, initializer=False):
         """saves the current game state"""
@@ -108,7 +147,6 @@ class GameOps(metaclass=IterRegistry):
             saved_state = dict()
         saved_state[move_count] = {
             'board': cls.board_objects.copy(),
-            'pieces': [piece for piece in GameOps],
             'globalVars': cls.get_global_vars()
         }
 
@@ -126,20 +164,21 @@ class GameOps(metaclass=IterRegistry):
 
     @classmethod
     def get_global_vars(cls):
-        """gets the required game status values to save and retrieve specific moves"""
+        """get the required game status values to save and retrieve specific moves"""
 
-        global_vars = {
-            'move_count': cls.move_count,
-            'was_checked': cls.was_checked.copy(),
-            'is_rochade': cls.is_rochade,
-            'is_rochade_gui': cls.is_rochade_gui,
-            'rochade_rook': cls.rochade_rook,
-            'rochade_rook_move_to': cls.rochade_rook_move_to,
-            'rochade_field_idx': cls.rochade_field_idx,
-            'queen_counter': cls.queen_counter,
-            'is_checkmate': cls.is_checkmate
-        }
-        return global_vars
+        attrs = [
+            'pieces', 'move_count', 'was_checked', 'is_rochade', 'is_rochade_gui',
+            'rochade_rook', 'rochade_rook_move_to', 'rochade_field_idx', 'promotion_counter', 'is_checkmate'
+        ]
+        return {attr: getattr(cls, attr) for attr in attrs}
+
+    @classmethod
+    def set_global_vars(cls, state):
+        """set the class attributes with given values"""
+
+        for attr in state:
+            setattr(cls, attr, state[attr])
+        return
 
     @classmethod
     def output_text(cls, text, prefix=None, style='black', is_test=False):
@@ -167,12 +206,26 @@ class GameOps(metaclass=IterRegistry):
             print(text)
 
     def move_counter(self):
-        """increments the move count after valid move"""
+        """increments the move count after valid move and keeps track color"""
+
         self.move_idx += 1
         GameOps.move_count += 1
         if GameOps.is_rochade:
             GameOps.rochade_rook.move_idx += 1
+        color_idx = 0 if self.check_color_move('white', move_count=GameOps.move_count) else 1
+        for color_cat in self.colors:
+            self.current_color[color_cat] = self.colors[color_cat][color_idx]
         return
+
+    @staticmethod
+    def check_color_move(color, move_count):
+        """checks whether a piece color is of equal color or opponent's color"""
+        if type(color) == str:
+            color = 1 if color in ['w', 'white'] else 2
+        if color - 1 == move_count % 2:
+            return True
+        else:
+            return False
 
     def get_move_step(self, move_to):
         """returns a tuple of the move vector"""
@@ -307,31 +360,44 @@ class GameOps(metaclass=IterRegistry):
                 GameOps.is_rochade_gui, GameOps.is_rochade = True, True
         return end_code, info_text
 
-    def check_pawn2queen(self, promoter=False):
+    def check_pawn2x(self):
         """checks whether pawn can be promoted"""
 
-        if 'Pawn' in self.name and any(row in self.current_field for row in ['1', '8']):
-            self.promote, promoter = True, True
-            GameOps.queen_counter += 1
-        return promoter
+        return True if isinstance(self, Pawn) and any(row in self.current_field for row in ['1', '8']) else False
 
-    def pawn2queen(self):
-        """promotes pawn to queen"""
+    @staticmethod
+    def promote_pawn(pawn, to_class):
+        """ promotes pawn into piece of class to_class
+        Arguments:
+            pawn (object of class Pawn): to pawn that is going to be promoted
+            to_class (str): name of class to promote pawn into
+        """
 
-        color_text = 'White' if self.color == 1 else 'Black'
-        short_name = 'Q_' + str(GameOps.queen_counter) + color_text[0]
-        queen_white_fin = self.board_gui.image_paths['Q_W']
-        queen_black_fin = self.board_gui.image_paths['Q_B']
-        p = Queen('Queen ' + color_text, short_name, self.color, self.current_field,
-                  queen_white_fin if self.color == 1 else queen_black_fin)
-        self.board_objects[self.field_idx] = p
-        self.kill_piece(self, replace=True)
-        self.board_gui.images['pieces'][self.short_name] = ''
-        self.board_gui.images['pieces'][p.short_name] \
-            = self.board_gui.read_image(fin=queen_white_fin if self.color == 1 else queen_black_fin)
-        self.board_gui.add_piece(p.short_name, self.board_gui.images['pieces'][p.short_name], p.field_idx)
-        mate_board = self.board_objects.copy()
-        return mate_board
+        GameOps.promotion_counter[to_class] += 1
+        color_text = 'White' if pawn.color == 1 else 'Black'
+        name_long = '{} {}'.format(to_class, color_text)
+        letter_first = to_class[0] if not to_class == 'Knight' else 'N'
+        name_short = '{}_{}{}'.format(letter_first, color_text[0], GameOps.promotion_counter[to_class])
+        img_path = pawn.board_gui.image_paths['promotion'][to_class]
+
+        specs = (name_long, name_short, pawn.color, pawn.current_field, img_path)
+        new_piece = GameOps.obj_from_string(class_name=to_class, params=specs)
+
+        pawn.board_objects[pawn.field_idx] = new_piece
+        pawn.kill_piece(pawn, replace=True)
+        pawn.board_gui.images['pieces'][pawn.short_name] = ''
+
+        img = pawn.board_gui.read_image(fin=img_path)
+        pawn.board_gui.add_image(img=img, name=new_piece.short_name, img_path=img_path, img_cat='pieces')
+        pawn.board_gui.add_piece(to_widget=pawn.board_gui.board, name=new_piece.short_name,
+                                 image=img, field_idx=pawn.board_gui.label2index_gui(new_piece.current_field))
+        GameOps.output_text(text='Pawn promoted to {}'.format(to_class))
+
+        # check checkmate
+        color_opponent = 2 if pawn.color == 1 else 1
+        new_piece.check_checkmate(color=color_opponent)
+        GameOps.save_state()
+        return
 
     def kill_piece(self, enemy, replace=False):
         """kills (removes) piece from board or replaces it (in case of pawn promotion)"""
@@ -417,7 +483,6 @@ class GameOps(metaclass=IterRegistry):
             self.output_text(info_text, prefix='--', style='warning', is_test=is_test)
             return escapes_check
 
-
         # move type is valid and executed, initial state is saved in case of reverting back
         mate_board = self.move_piece(move_to=move_to, move_validity=move_validity, do_rochade=GameOps.is_rochade)
 
@@ -428,6 +493,10 @@ class GameOps(metaclass=IterRegistry):
             if is_test:
                 self.redo_move(mate_board=mate_board, move_validity=move_validity, is_test=is_test)
             else:  # all tests passed for a valid move
+                # pawn promotion requires user interaction in GUI, therefore we need to do it post check_check()
+                if self.check_pawn2x():
+                    self.board_gui.promotion_choice(color=self.color)
+
                 self.move_counter()
                 self.output_text(info_text, is_test=is_test)
                 opponent_color = 2 if self.color == 1 else 1
@@ -463,9 +532,10 @@ class GameOps(metaclass=IterRegistry):
                 move_validity=self.codes['empty'],
                 do_rochade=False)
 
-        if self.check_pawn2queen():  # promote pawn
-            self.pawn2queen()
-
+        if self.check_pawn2x():  # promote pawn
+            GameOps.promote_piece = self
+        else:
+            GameOps.promote_piece = None
         return mate_board
 
     @classmethod
