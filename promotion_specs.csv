@@ -1,0 +1,9 @@
+name_long,name_short,color,img_file
+Rook,R,1,wR.png
+Knight,N,1,wN.png
+Bishop,B,1,wB.png
+Queen,Q,1,wQ.png
+Rook,R,2,bR.png
+Knight,N,2,bN.png
+Bishop,B,2,bB.png
+Queen,Q,2,bQ.png

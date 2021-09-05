@@ -2,6 +2,7 @@ import os
 import time
 
 import numpy as np
+import pandas as pd
 import tkinter as tk
 
 from chess_core import GameOps
@@ -20,12 +21,16 @@ def button_control(func):
     return wrap
 
 
+def disable_event():
+    pass
+
+
 class GameBoard(tk.Frame):
     column_chars, row_chars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], ['1', '2', '3', '4', '5', '6', '7', '8']
     label_column, label_row = [], []
-    images = {'pieces': {}, 'button': {}}
-    widgets = {'button': {}, 'text': {}}
-    image_paths = {}
+    images = {'pieces': {}, 'button': {}, 'promotion': {}}
+    widgets = {'button': {}, 'text': {}, 'window': {}}
+    image_paths = {'pieces': {}, 'button': {}, 'promotion': {}}
 
     def __init__(self, parent, board_state, root_dir, n_rows=8, n_cols=8, color1='#F0D9B5', color2='#B58863'):
         parent.resizable(True, True)
@@ -53,11 +58,15 @@ class GameBoard(tk.Frame):
 
         # get board game dimensions
         self.layout = self.get_game_layout(window_w=960, window_h=540, n_rows=n_rows, n_cols=n_cols)
+        self.screen_center = int(self.parent.winfo_screenwidth() / 2), int(self.parent.winfo_screenheight() / 2)
 
         # create main window
         self.mainWindow = parent
         self.mainWindow.title('Chess')
-        self.mainWindow.geometry('{}x{}'.format(self.layout['total_w'], self.layout['board_ext_h']))
+        self.mainWindow.geometry('{}x{}+{}+{}'.format(
+            self.layout['total_w'], self.layout['board_ext_h'],
+            *self.center_window(w=self.layout['total_w'], h=self.layout['board_ext_h'], center_xy=self.screen_center)
+        ))
         self.mainWindow.bind('<Configure>', self.refresh)
 
         # create board canvas
@@ -91,6 +100,7 @@ class GameBoard(tk.Frame):
 
     def get_field_names(self):
         """creates an nd array with the board field names"""
+
         return GameOps.get_field_names(row_chars=self.row_chars, column_chars=self.column_chars)
 
     def coord_to_field(self, event):
@@ -134,6 +144,13 @@ class GameBoard(tk.Frame):
             window_w=self.mainWindow.winfo_width(), window_h=self.mainWindow.winfo_height(), n_rows=self.n_rows,
             n_cols=self.n_cols, last_layout=self.layout)
         return
+
+    def center_window(self, w, h, center_xy):
+        """returns the x, y coordinates required to center a window around center_xy (where anchor='nw')"""
+
+        x = int(center_xy[0] - w / 2)  # x_offset
+        y = int(center_xy[1] - h / 2)  # y_offset
+        return x, y
 
     def draw_board(self, event):
         """Draw the game board and update layout dimensions with the current window size"""
@@ -228,13 +245,7 @@ class GameBoard(tk.Frame):
                 anchor='ne', tags='panel', state=tk.NORMAL)
             self.widgets['text']['info'] = self.make_text(
                 canvas=self.panel, x=undo_x, y=info_y, h=5*height, w=half_width, anchor='nw')
-        else:
-            pass
-        # # create rectangle around panel border
-        # rect_coords = (
-        #     pad, pad, self.layout['panel_w'] - 2 * pad, self.layout['board_ext_h'] - pad
-        # )
-        # self.panel.create_rectangle(rect_coords, tags='panel')
+
         return
 
     @staticmethod
@@ -249,7 +260,18 @@ class GameBoard(tk.Frame):
         return ImageTk.PhotoImage(img)
 
     def save_image(self, fin, img_cat, img_name, resize=None, scale=None):
+        """saves image so that reference is not lost"""
+
         self.images[img_cat][img_name] = self.read_image(fin, resize, scale)
+
+    def fill_board(self, pieces):
+        """fills the board with the game pieces"""
+
+        for piece in pieces:
+            img = GameBoard.read_image(fin=piece.img_file)
+            self.add_piece(to_widget=self.board, name=piece.short_name, image=img, field_idx=piece.field_idx)
+            self.add_image(img=img, name=piece.short_name, img_path=piece.img_file, img_cat='pieces')
+        return
 
     def flip_board(self):
         """flips the GUI board so that each player can play its point of view"""
@@ -291,6 +313,7 @@ class GameBoard(tk.Frame):
         layout['panel_w'] = int(window_w - layout['panel_x'])
         layout['total_w'] = int(layout['panel_x'] + layout['panel_w'])
         layout['field_idx'] = last_layout['field_idx'] if last_layout is not None else (0, 0)
+        layout['field_idx_reset'] = layout['field_idx']
         return layout
 
     @staticmethod
@@ -338,6 +361,59 @@ class GameBoard(tk.Frame):
         text_box.config(state=tk.DISABLED)
         text_box.see('end')
 
+    def make_pop_up(self, title, lock=True, w=100, h=100, x_off=0, y_off=0, center_xy=None):
+        """creates a pop up window.
+        Arguments:
+            lock: (bool) if lock == True only the pop up window can be interacted with until it's closed
+            center_xy
+        """
+        win = tk.Toplevel()
+        win.wm_title(title)
+        win.resizable(width=tk.FALSE, height=tk.FALSE)
+        if lock:
+            win.protocol('WM_DELETE_WINDOW', disable_event)
+            win.grab_set()
+        if center_xy is not None:
+            x_off, y_off = self.center_window(w=w, h=h, center_xy=center_xy)
+        win.geometry('{}x{}+{}+{}'.format(w, h, x_off, y_off))
+        return win
+
+    @staticmethod
+    def close_pop_up(win, was_locked=True):
+        """closes a pop up window"""
+        if was_locked:
+            win.grab_release()
+        win.destroy()
+        return
+
+    def promotion_choice(self, color):
+        """creates a pop up window to choose which piece class the pawn will be promoted to"""
+        img_sample = self.images['pieces'][next(iter(self.images['pieces']))]
+        w, h = img_sample.width(), img_sample.height()
+        self.widgets['window']['promote'] = self.make_pop_up(title='Promotion Choice', lock=True,
+                                                             w=w*4, h=h, center_xy=self.screen_center)
+        win_canvas = tk.Canvas(self.widgets['window']['promote'], bg='bisque', borderwidth=0, highlightthickness=0)
+        win_canvas.pack(expand=tk.TRUE, fill=tk.BOTH)
+        piece_specs_fin = os.path.join(self.root_dir, 'promotion_specs.csv')
+        piece_specs = pd.read_csv(piece_specs_fin)
+        for idx, piece in piece_specs.loc[piece_specs.color == color].reset_index().iterrows():
+            img_path = os.path.join(self.root_dir, 'images', piece['img_file'])
+            piece['img_file'] = img_path
+            piece_type = piece['name_long'].split()[0]
+            img = self.read_image(img_path)
+            self.make_button(button_name=piece_type, button_method=self.click_promotion, canvas=win_canvas,
+                             x=(idx * w), y=(w / 2), w=w, h=h, image=img, anchor='w')
+            self.add_image(img=img, name=piece_type, img_path=img_path, img_cat='promotion')
+        return
+
+    def click_promotion(self, event):
+        """registers which piece class user clicked for the pawn promotion and initiates pawn promotion"""
+
+        piece_type = event.widget['text']
+        GameOps.promote_pawn(pawn=GameOps.promote_piece, to_class=piece_type)
+        self.close_pop_up(win=self.widgets['window']['promote'], was_locked=True)
+        return
+
     def click_board(self, event):
         """This function controls the game board interaction
             1) the first click (click_idx==0) selects the chess piece
@@ -359,21 +435,21 @@ class GameBoard(tk.Frame):
         move_count = GameOps.move_count
 
         if self.click_idx == 0:  # select piece
-            self.first_board_click(piece, piece_color, move_count)
+            self.first_board_click(piece, field_idx, piece_color, move_count)
         else:
             self.second_board_click(piece, field_idx, piece_color, field_name, move_count)
         return
 
-    def first_board_click(self, piece, piece_color, move_count):
+    def first_board_click(self, piece, field_idx, piece_color, move_count):
         """governs the first board click by one of the following operations:
             -   select a piece if field contains a piece of the player's color
             -   do nothing if field is empty or contains opponent's piece
         """
 
         if piece:
-            if not self.check_color_move(piece_color, move_count):
+            if not GameOps.check_color_move(piece_color, move_count):
                 return
-
+            self.layout['field_idx_reset'] = field_idx
             self.highlighter = self.create_highlighter(canvas=self.board, field_idx=self.layout['field_idx'])
             self.piece_selected = piece
             self.click_idx += 1
@@ -387,11 +463,11 @@ class GameBoard(tk.Frame):
             -   do nothing if invalid move and output a warning
         """
 
-        if self.click_idx == 1 and self.check_color_move(piece_color, move_count):  # select another piece
+        if self.click_idx == 1 and GameOps.check_color_move(piece_color, move_count):  # select another piece
             self.end_move()
             self.remove_highlighter()
             self.layout['field_idx'] = field_idx
-            self.first_board_click(piece, piece_color, move_count)
+            self.first_board_click(piece, field_idx, piece_color, move_count)
         else:  # do the move
             self.piece_selected.move(field_name)
             if self.valid_move:
@@ -416,16 +492,7 @@ class GameBoard(tk.Frame):
                     self.flip_board()
                     time.sleep(0.5)
             else:
-                pass
-
-    @staticmethod
-    def check_color_move(color, move_count):
-        """checks whether a piece color is of equal color or opponent's color"""
-
-        if color - 1 == move_count % 2:
-            return True
-        else:
-            return False
+                self.layout['field_idx'] = self.layout['field_idx_reset']
 
     def end_move(self):
         """ends a move by resetting the click count"""
@@ -443,7 +510,6 @@ class GameBoard(tk.Frame):
 
         self.board.delete(self.highlighter)
         self.highlighter = None
-        self.layout['field_idx'] = (None, None)
         return
 
     def rectangle_field_coords(self, field_idx):
@@ -456,12 +522,21 @@ class GameBoard(tk.Frame):
         y_1 = y_0 - self.layout['field_w']
         return x_0, y_0, x_1, y_1
 
-    def add_piece(self, name, image, field_idx):
+    def add_piece(self, to_widget, name, image, field_idx, x=0, y=0):
         """Add a piece to the game board"""
 
-        self.board.create_image(0, 0, image=image, tags=(name, 'piece'), anchor='c')
+        to_widget.create_image(0, 0, image=image, tags=(name, 'piece'), anchor='c')
         self.place_piece(name, (field_idx[0], field_idx[1]))
         return
+
+    @classmethod
+    def add_image(cls, img, name, img_path, img_cat):
+        """adds/saves an image under attributes images and image_paths. This is necessary as tkinter images need to
+        have an existing reference."""
+        cls.images[img_cat][name] = img
+        cls.image_paths[img_cat][name] = img_path
+        return
+
 
     @classmethod
     def add_images(cls, piece_images, piece_image_paths):
@@ -499,27 +574,22 @@ class GameBoard(tk.Frame):
         if self.redo_move == self.final_move:
             self.state_change = True
             self._saved_states = GameOps.load_state()
+
         self.redo_move = state_count
         state = self._saved_states[self.redo_move].copy()
-        GameOps.pieces = [p for p in state['pieces'] if p.is_alive]
-        GameOps.move_count = state['globalVars']['move_count']
-        GameOps.was_checked = state['globalVars']['was_checked']
-        GameOps.is_rochade, GameOps.is_rochade_gui = state['globalVars']['is_rochade'],\
-                                                 state['globalVars']['is_rochade_gui']
-        GameOps.rochade_rook = state['globalVars']['rochade_rook']
-        GameOps.rochade_rook_move_to = state['globalVars']['rochade_rook_move_to']
-        GameOps.rochade_field_idx = state['globalVars']['rochade_field_idx']
-        GameOps.queen_counter = state['globalVars']['queen_counter']
-        GameOps.is_checkmate = state['globalVars']['is_checkmate']
+        GameOps.set_global_vars(state=state['globalVars'])
         for i in range(len(self.board_state)):
             for j in range(len(self.board_state[i])):
                 self.board_state[i][j] = None
                 self.board_state[i][j] = state['board'][i][j]
         self.board.delete('piece')
         for p in GameOps:
-            self.images['pieces'][p.short_name] = tk.PhotoImage(file=p.img_file)
-            self.add_piece(p.short_name, self.images['pieces'][p.short_name], p.field_idx)
-        self.output_text('Loaded Move {}'.format('Initial' if state_count == -1 else state_count), prefix='=>', style='load')
+            if p.is_alive:
+                img = self.read_image(fin=p.img_file)
+                self.add_piece(to_widget=self.board, name=p.short_name, image=img, field_idx=p.field_idx)
+                self.add_image(img=img, name=p.short_name, img_path=p.img_file, img_cat='pieces')
+        self.output_text('Loaded Move {}'.format('Initial' if state_count == -1 else state_count),
+                         prefix='=>', style='load')
         return
 
     def update_bottons(self):
@@ -570,6 +640,8 @@ class GameBoard(tk.Frame):
         return self
 
     def click_warning(self, event):
+        """hide/show warnings in text box log"""
+
         GameOps.show_warnings = True if not GameOps.show_warnings else False
         widget = self.widgets['button']['warnings']
         widget.configure(state=tk.DISABLED if GameOps.show_warnings else tk.NORMAL)
